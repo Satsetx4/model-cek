@@ -1,0 +1,870 @@
+<!DOCTYPE html>
+<html lang="id">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>AI Model Latency &amp; Trust Benchmark</title>
+<style>
+:root{--bg-primary:#0d1117;--bg-secondary:#161b22;--bg-card:#1c2333;--bg-hover:#222b3a;--border:#30363d;--border-light:#444c56;--text-primary:#e6edf3;--text-secondary:#8b949e;--text-muted:#6e7681;--accent-green:#3fb950;--accent-green-dim:rgba(63,185,80,.15);--accent-blue:#58a6ff;--accent-blue-dim:rgba(88,166,255,.15);--accent-yellow:#d29922;--accent-yellow-dim:rgba(210,153,34,.15);--accent-orange:#f0883e;--accent-red:#f85149;--accent-purple:#bc8cff;--gradient-1:linear-gradient(135deg,#667eea 0%,#764ba2 100%);--radius:12px;--radius-sm:8px}
+*{margin:0;padding:0;box-sizing:border-box}
+body{font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,sans-serif;background:var(--bg-primary);color:var(--text-primary);min-height:100vh;overflow-x:hidden}
+body::before{content:'';position:fixed;top:0;left:0;right:0;bottom:0;background:radial-gradient(ellipse at 20% 20%,rgba(102,126,234,.08),transparent 50%),radial-gradient(ellipse at 80% 80%,rgba(118,75,162,.06),transparent 50%);pointer-events:none;z-index:0}
+.app-container{max-width:1280px;margin:0 auto;padding:20px;position:relative;z-index:1}
+.header{text-align:center;padding:40px 20px 30px}
+.header-icon{width:64px;height:64px;margin:0 auto 16px;background:var(--gradient-1);border-radius:18px;display:flex;align-items:center;justify-content:center;font-size:32px;box-shadow:0 4px 20px rgba(102,126,234,.4);animation:float 3s ease-in-out infinite}
+@keyframes float{0%,100%{transform:translateY(0)}50%{transform:translateY(-6px)}}
+.header h1{font-size:2rem;font-weight:700;background:linear-gradient(135deg,#e6edf3,#8b949e);-webkit-background-clip:text;-webkit-text-fill-color:transparent;background-clip:text;margin-bottom:8px}
+.header p{color:var(--text-secondary);font-size:1rem}
+.card{background:var(--bg-card);border:1px solid var(--border);border-radius:var(--radius);padding:24px;margin-bottom:20px}
+.card:hover{border-color:var(--border-light)}
+.card-title{font-size:1rem;font-weight:600;margin-bottom:16px;display:flex;align-items:center;gap:8px}
+.setup-grid{display:grid;gap:16px}
+.form-group{display:flex;flex-direction:column;gap:6px}
+.form-label{font-size:.85rem;color:var(--text-secondary);font-weight:500}
+.form-input,.form-select{background:var(--bg-secondary);border:1px solid var(--border);border-radius:var(--radius-sm);padding:10px 14px;color:var(--text-primary);font-size:.9rem;outline:none}
+.form-input:focus,.form-select:focus{border-color:var(--accent-blue);box-shadow:0 0 0 3px rgba(88,166,255,.15)}
+.form-row{display:grid;grid-template-columns:1fr 1fr;gap:16px}
+@media(max-width:600px){.form-row{grid-template-columns:1fr}}
+.model-chips-wrapper{display:flex;flex-wrap:wrap;gap:8px;margin-top:8px;padding:12px;background:var(--bg-secondary);border-radius:var(--radius-sm);border:1px solid var(--border)}
+.model-chip{display:flex;align-items:center;gap:6px;padding:4px 10px;background:var(--bg-card);border:1px solid var(--border);border-radius:20px;font-size:.78rem;cursor:pointer;user-select:none}
+.model-chip:hover{border-color:var(--border-light)}
+.model-chip.active{border-color:var(--accent-blue);background:var(--accent-blue-dim)}
+.model-chip input{display:none}
+.chip-dot{width:6px;height:6px;border-radius:50%;background:var(--accent-green);flex-shrink:0}
+.btn{padding:10px 20px;border:none;border-radius:var(--radius-sm);font-size:.9rem;font-weight:600;cursor:pointer;transition:all .2s;display:inline-flex;align-items:center;gap:8px;justify-content:center}
+.btn-primary{background:var(--gradient-1);color:white;box-shadow:0 2px 12px rgba(102,126,234,.3)}
+.btn-primary:hover{transform:translateY(-1px);box-shadow:0 4px 20px rgba(102,126,234,.5)}
+.btn-primary:disabled{opacity:.5;cursor:not-allowed;transform:none}
+.btn-secondary{background:var(--bg-secondary);color:var(--text-primary);border:1px solid var(--border)}
+.btn-secondary:hover{background:var(--bg-hover);border-color:var(--border-light)}
+.btn-group{display:flex;gap:12px;flex-wrap:wrap}
+.progress-section{display:none}.progress-section.active{display:block}
+.progress-bar-container{background:var(--bg-secondary);border-radius:20px;overflow:hidden;height:8px;margin:16px 0}
+.progress-bar{height:100%;background:var(--gradient-1);border-radius:20px;transition:width .3s;width:0}
+.progress-stats{display:grid;grid-template-columns:repeat(auto-fit,minmax(120px,1fr));gap:12px;margin-bottom:16px}
+.stat-box{background:var(--bg-secondary);border-radius:var(--radius-sm);padding:12px;text-align:center}
+.stat-value{font-size:1.4rem;font-weight:700;margin-bottom:2px}
+.stat-label{font-size:.75rem;color:var(--text-secondary);text-transform:uppercase}
+.stat-box.running .stat-value{color:var(--accent-blue)}
+.stat-box.success .stat-value{color:var(--accent-green)}
+.stat-box.failed .stat-value{color:var(--accent-red)}
+.stat-box.total .stat-value{color:var(--accent-purple)}
+.stat-box.deep .stat-value{color:var(--accent-yellow)}
+.live-log{background:var(--bg-secondary);border:1px solid var(--border);border-radius:var(--radius-sm);padding:12px;max-height:200px;overflow-y:auto;font-family:'SF Mono','Fira Code',monospace;font-size:.78rem;line-height:1.8}
+.log-entry{display:flex;align-items:center;gap:8px;padding:2px 0;animation:fadeIn .3s ease}
+@keyframes fadeIn{from{opacity:0;transform:translateX(-10px)}to{opacity:1;transform:translateX(0)}}
+.log-status{width:18px;text-align:center;flex-shrink:0}
+.log-model{flex:1;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.results-section{display:none}.results-section.active{display:block}
+.summary-row{display:grid;grid-template-columns:repeat(auto-fit,minmax(180px,1fr));gap:16px;margin-bottom:24px}
+.summary-card{background:var(--bg-card);border:1px solid var(--border);border-radius:var(--radius);padding:20px;text-align:center;position:relative;overflow:hidden}
+.summary-card::before{content:'';position:absolute;top:0;left:0;right:0;height:3px}
+.summary-card.fastest::before{background:var(--accent-green)}.summary-card.slowest::before{background:var(--accent-red)}.summary-card.avg-latency::before{background:var(--accent-yellow)}.summary-card.success-rate::before{background:var(--accent-purple)}.summary-card.ratio::before{background:var(--accent-orange)}.summary-card.trust::before{background:var(--accent-blue)}
+.summary-card .icon-big{font-size:24px;margin-bottom:8px}.summary-card .value{font-size:1.5rem;font-weight:700;margin-bottom:4px}.summary-card .label{font-size:.8rem;color:var(--text-secondary)}.summary-card .detail{font-size:.75rem;color:var(--text-muted);margin-top:4px}
+.chart-container{background:var(--bg-card);border:1px solid var(--border);border-radius:var(--radius);padding:20px;margin-bottom:24px}
+.chart-title{font-size:.95rem;font-weight:600;margin-bottom:16px}
+.bar-chart{display:flex;flex-direction:column;gap:6px}
+.bar-row{display:flex;align-items:center;gap:10px}
+.bar-label{width:200px;font-size:.78rem;text-align:right;flex-shrink:0;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;color:var(--text-secondary)}
+.bar-track{flex:1;height:24px;background:var(--bg-secondary);border-radius:6px;overflow:hidden;position:relative}
+.bar-fill{height:100%;border-radius:6px;transition:width .8s;position:relative;min-width:2px}
+.bar-fill.tier-S{background:linear-gradient(90deg,#3fb950,#56d364)}.bar-fill.tier-A{background:linear-gradient(90deg,#58a6ff,#79c0ff)}.bar-fill.tier-B{background:linear-gradient(90deg,#d29922,#e3b341)}.bar-fill.tier-C{background:linear-gradient(90deg,#f0883e,#f5a623)}.bar-fill.tier-D{background:linear-gradient(90deg,#f85149,#ff6b6b)}.bar-fill.tier-F{background:linear-gradient(90deg,#6e7681,#8b949e)}
+.bar-value{width:75px;font-size:.78rem;font-weight:600;text-align:left;flex-shrink:0}
+.table-container{background:var(--bg-card);border:1px solid var(--border);border-radius:var(--radius);overflow:hidden;margin-bottom:24px}
+.table-header{padding:16px 20px;border-bottom:1px solid var(--border);display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:12px}
+.filter-btn{padding:6px 12px;background:var(--bg-secondary);border:1px solid var(--border);border-radius:20px;color:var(--text-secondary);font-size:.78rem;cursor:pointer;transition:all .15s}
+.filter-btn:hover{border-color:var(--border-light)}.filter-btn.active{background:var(--accent-blue-dim);border-color:var(--accent-blue);color:var(--accent-blue)}
+.table-scroll{overflow-x:auto}
+table{width:100%;border-collapse:collapse;font-size:.85rem}
+th{text-align:left;padding:12px 16px;font-weight:600;color:var(--text-secondary);font-size:.75rem;text-transform:uppercase;letter-spacing:.5px;border-bottom:1px solid var(--border);cursor:pointer;white-space:nowrap}
+td{padding:10px 16px;border-bottom:1px solid rgba(48,54,61,.5);white-space:nowrap}
+tr:hover td{background:var(--bg-hover)}
+.rank-badge{width:26px;height:26px;border-radius:50%;display:inline-flex;align-items:center;justify-content:center;font-size:.72rem;font-weight:700}
+.rank-1{background:linear-gradient(135deg,#ffd700,#ffb700);color:#000}.rank-2{background:linear-gradient(135deg,#c0c0c0,#a0a0a0);color:#000}.rank-3{background:linear-gradient(135deg,#cd7f32,#b8690e);color:#fff}.rank-default{background:var(--bg-secondary);color:var(--text-secondary);border:1px solid var(--border)}
+.latency-fast{color:var(--accent-green)}.latency-medium{color:var(--accent-yellow)}.latency-slow{color:var(--accent-orange)}.latency-very-slow{color:var(--accent-red)}
+.status-ok{background:var(--accent-green-dim);color:var(--accent-green);padding:3px 10px;border-radius:20px;font-size:.75rem;font-weight:600}
+.status-partial{background:var(--accent-yellow-dim);color:var(--accent-yellow);padding:3px 10px;border-radius:20px;font-size:.75rem;font-weight:600}
+.status-fail{background:var(--accent-red-dim);color:var(--accent-red);padding:3px 10px;border-radius:20px;font-size:.75rem;font-weight:600}
+.tier-tag{display:inline-block;padding:2px 8px;border-radius:4px;font-size:.7rem;font-weight:600}
+.tier-S{background:var(--accent-green-dim);color:var(--accent-green)}.tier-A{background:var(--accent-blue-dim);color:var(--accent-blue)}.tier-B{background:var(--accent-yellow-dim);color:var(--accent-yellow)}.tier-C{background:var(--accent-orange-dim);color:var(--accent-orange)}.tier-D{background:var(--accent-red-dim);color:var(--accent-red)}.tier-F{background:rgba(110,118,129,.2);color:var(--text-muted)}
+.trust-high{color:var(--accent-green)}.trust-med{color:var(--accent-yellow)}.trust-low{color:var(--accent-red)}
+.export-bar{display:flex;gap:10px;flex-wrap:wrap}
+.spinner{display:inline-block;width:16px;height:16px;border:2px solid rgba(255,255,255,.3);border-top-color:white;border-radius:50%;animation:spin .6s linear infinite}
+@keyframes spin{to{transform:rotate(360deg)}}
+.pulse{animation:pulse 1.5s ease-in-out infinite}@keyframes pulse{0%,100%{opacity:1}50%{opacity:.5}}
+@media(max-width:768px){.app-container{padding:12px}.header h1{font-size:1.5rem}.card{padding:16px}.bar-label{width:120px;font-size:.7rem}.summary-row{grid-template-columns:repeat(2,1fr)}.btn-group{flex-direction:column}}
+</style>
+</head>
+<body>
+<div class="app-container">
+  <div class="header">
+    <div class="header-icon">&#x1f680;</div>
+    <h1>AI Model Latency &amp; Trust Benchmark</h1>
+    <p>Uji kecepatan respon, deteksi sanitasi/masking, dan trust score per model</p>
+  </div>
+
+  <div class="card" id="setupCard">
+    <div class="card-title"><span style="background:var(--accent-blue-dim);color:var(--accent-blue);padding:6px;border-radius:8px;font-size:14px">&#x2699;&#xfe0f;</span>Konfigurasi</div>
+    <div class="setup-grid">
+      <div class="form-group">
+        <label class="form-label">API Key (Bearer Token)</label>
+        <input type="password" class="form-input" id="apiKeyInput" placeholder="sk-your-api-key-here atau paste dari env HERMES_CUSTOM_CF_API_KEY">
+      </div>
+      <div class="form-row">
+        <div class="form-group">
+          <label class="form-label">Base URL</label>
+          <input type="text" class="form-input" id="baseUrlInput" value="https://api.cfrouter.my.id/v1">
+        </div>
+        <div class="form-group">
+          <label class="form-label">Jumlah Attempt per Model</label>
+          <select class="form-select" id="attemptInput">
+            <option value="1">1x (cepat)</option>
+            <option value="2" selected>2x (rata-rata)</option>
+            <option value="3">3x (akurat)</option>
+          </select>
+        </div>
+      </div>
+      <div class="form-row">
+        <div class="form-group">
+          <label class="form-label"><input type="checkbox" id="enableDeepScanCheck" checked style="vertical-align:middle">&#x1f9ea; Enable Deep Scan (Deteksi Sanitasi &amp; Trust Score)</label>
+        </div>
+        <div class="form-group">
+          <label class="form-label">Concurrent Requests</label>
+          <select class="form-select" id="concurrentInput">
+            <option value="2">2 (aman)</option>
+            <option value="5" selected>5 (recommended)</option>
+            <option value="10">10 (agresif)</option>
+          </select>
+        </div>
+      </div>
+      <div class="form-group">
+        <label class="form-label">Daftar Model dari Provider</label>
+        <div style="display:flex;gap:8px;flex-wrap:wrap;margin-bottom:8px">
+          <button class="btn btn-primary" id="fetchModelsBtn" style="font-size:.85rem;padding:8px 16px">&#x1f4e1; Fetch Models</button>
+          <button class="btn btn-secondary" id="selectAllModelsBtn" style="font-size:.8rem;padding:6px 12px;display:none">&#x2705 Pilih Semua</button>
+          <button class="btn btn-secondary" id="deselectAllModelsBtn" style="font-size:.8rem;padding:6px 12px;display:none">&#x2610; Deselect All</button>
+        </div>
+        <div style="text-align:right;font-size:.85rem;color:var(--text-secondary);margin-bottom:8px"><span id="selectedCount">0</span> / <span id="totalCount">0</span> dipilih</div>
+      </div>
+      <div class="model-chips-wrapper" id="modelCheckboxes" style="display:block"></div>
+      <div class="form-group">
+        <label class="form-label">Custom Prompt (opsional, default = 2 words reply)</label>
+        <input type="text" class="form-input" id="promptInput" value="" placeholder="Kosongkan = pakai default, isi = custom prompt untuk test masking">
+      </div>
+      <div class="btn-group">
+        <button class="btn btn-primary" id="startBtn" disabled>&#x1f680; Mulai Benchmark</button>
+        <button class="btn btn-secondary" id="resetBtn">&#x1f504; Reset</button>
+      </div>
+    </div>
+  </div>
+
+  <div class="card progress-section" id="progressSection">
+    <div class="card-title"><span style="background:var(--accent-blue-dim);color:var(--accent-blue);padding:6px;border-radius:8px;font-size:14px">&#x23f3;</span> Benchmark Sedang Berjalan... <span class="spinner pulse"></span></div>
+    <div class="progress-stats">
+      <div class="stat-box total"><div class="stat-value" id="statTotal">0</div><div class="stat-label">Total</div></div>
+      <div class="stat-box running"><div class="stat-value pulse" id="statRunning">0</div><div class="stat-label">Running</div></div>
+      <div class="stat-box success"><div class="stat-value" id="statSuccess">0</div><div class="stat-label">Sukses</div></div>
+      <div class="stat-box failed"><div class="stat-value" id="statFailed">0</div><div class="stat-label">Gagal</div></div>
+      <div class="stat-box deep"><div class="stat-value" id="statDeep">0</div><div class="stat-label">Deep Scan</div></div>
+    </div>
+    <div class="progress-bar-container"><div class="progress-bar" id="progressBar"></div></div>
+    <div class="live-log" id="liveLog"></div>
+  </div>
+
+  <div class="results-section" id="resultsSection">
+    <div class="summary-row" id="summaryRow"></div>
+    <div class="chart-container">
+      <div class="chart-title">&#x1f4ca; Perbandingan Latensi (Best Time)</div>
+      <div class="bar-chart" id="barChart"></div>
+    </div>
+    <div class="table-container">
+      <div class="table-header">
+        <div style="display:flex;align-items:center;gap:8px;flex-wrap:wrap">
+          <strong>&#x1f4cb; Detail Hasil</strong>
+          <button class="filter-btn active" data-filter="all">Semua</button>
+          <button class="filter-btn" data-filter="ok">OK</button>
+          <button class="filter-btn" data-filter="partial">Partial</button>
+          <button class="filter-btn" data-filter="fail">Fail</button>
+          <button class="filter-btn" data-filter="clean">Clean</button>
+          <button class="filter-btn" data-filter="masked">Masked</button>
+          <button class="filter-btn" data-filter="trust_high">&#x1f7e2; Trust</button>
+          <button class="filter-btn" data-filter="trust_med">&#x1f7e1; Trust</button>
+          <button class="filter-btn" data-filter="trust_low">&#x1f534; Trust</button>
+        </div>
+        <div class="export-bar">
+          <button class="btn btn-secondary" id="exportCsvBtn" style="padding:6px 12px;font-size:.8rem">&#x1f4e5; CSV</button>
+          <button class="btn btn-secondary" id="exportJsonBtn" style="padding:6px 12px;font-size:.8rem">&#x1f4e5; JSON</button>
+          <button class="btn btn-secondary" id="copyTableBtn" style="padding:6px 12px;font-size:.8rem">&#x1f4cb; Copy</button>
+        </div>
+      </div>
+      <div class="table-scroll">
+        <table id="resultsTable">
+          <thead><tr>
+            <th data-sort="rank">#</th><th data-sort="model">Model</th><th data-sort="tier">Tier</th>
+            <th data-sort="latency">Latency</th><th data-sort="masking">&#x1f6e1; Masked?</th>
+            <th data-sort="sanitize">&#x1f9ea; Sanitasi</th><th data-sort="trust">&#x1f916; Trust</th>
+            <th data-sort="response_preview">Response</th><th data-sort="attempts">Attempts</th>
+            <th data-sort="status">Status</th>
+          </tr></thead>
+          <tbody id="resultsBody"></tbody>
+        </table>
+      </div>
+    </div>
+    <div class="card" id="failedCard" style="display:none">
+      <div class="card-title"><span style="background:var(--accent-red-dim);color:var(--accent-red);padding:6px;border-radius:8px;font-size:14px">&#x26a0;&#xfe0f;</span>Model yang Gagal</div>
+      <div id="failedList"></div>
+    </div>
+  </div>
+
+  <div style="text-align:center;padding:30px 20px;color:var(--text-muted);font-size:.8rem">AI Model Latency &amp; Trust Benchmark &#x2022; Built for Hermes Agent</div>
+</div>
+
+<script>
+(function(){
+// ===== STATE =====
+var APP={
+  apiKey:'',baseUrl:'',models:[],selectedModels:new Set(),results:[],isRunning:false,
+  currentAttempt:0,totalAttempts:0,totalRequests:0,completedRequests:0,
+  successfulRequests:0,failedRequests:0,deepScanned:0,abortController:null,
+};
+
+// Probe prompts
+var PROBES={
+  identity:"Reply with exactly two words: OK DONE",
+  counting:"Count exactly how many times the letter 'a' appears in 'banana'. Output ONLY the number.",
+  date:"What is today's date? Reply with just the date in YYYY-MM-DD format.",
+  creativity:"Write a single creative sentence about a red fox in a forest. No more than 15 words.",
+};
+
+// ===== INIT =====
+function init(){renderChips();bindEvents();updateCounts()}
+
+// ===== FETCH MODELS =====
+function fetchModelsFromApi(){
+  var apiKey=document.getElementById('apiKeyInput').value.trim();
+  var baseUrl=document.getElementById('baseUrlInput').value.replace(/\/$/,'');
+  if(!apiKey){alert('Masukkan API Key dulu!');document.getElementById('apiKeyInput').focus();return}
+  var btn=document.getElementById('fetchModelsBtn');
+  btn.disabled=true;btn.innerHTML='<span class="spinner"></span> Fetching...';
+  fetch(baseUrl+'/models',{headers:{'Authorization':'Bearer '+apiKey}})
+  .then(function(r){return r.json()})
+  .then(function(data){
+    var models=[];
+    if(Array.isArray(data.data))models=data.data.map(function(m){return m.id}).filter(Boolean);
+    else if(Array.isArray(data.models))models=data.models.filter(Boolean);
+    if(models.length===0)throw new Error('No models found');
+    models=[].concat(new Set(models)).sort();
+    APP.models=models;APP.selectedModels=new Set(models);
+    renderChips();showLog('\\u2705 '+models.length+' models found from '+baseUrl);
+  })
+  .catch(function(e){
+    showLog('\\u26a0\\ufe0f /models endpoint not available. Use manual entry below.');
+    document.getElementById('modelCheckboxes').innerHTML=
+      '<textarea id="manualModelsInput" rows="6" placeholder="Qwen3.8-Max&#10;gemini-3-flash&#10;mistral-small-4" style="width:100%;background:var(--bg-primary);border:1px solid var(--border);border-radius:8px;padding:10px;color:var(--text-primary);font-family:monospace;resize:vertical">'+APP.models.join('\\n')+'</textarea><br><button class="btn btn-secondary" id="applyManualBtn" style="margin-top:8px">&#x2705; Apply Manual List</button>';
+    setTimeout(function(){
+      document.getElementById('applyManualBtn')?.addEventListener('click',function(){
+        var models=document.getElementById('manualModelsInput').value.trim().split('\\n').map(function(s){return s.trim()}).filter(function(s){return s.length>0&&s[0]!=='#'});
+        if(models.length===0){alert('Enter at least 1 model');return}
+        APP.models=models;APP.selectedModels=new Set(models);renderChips()});
+    },50)}, {timeout:10000});
+}
+
+function applyManualModels(){
+  var text=document.getElementById('manualModelsInput').value.trim();
+  var models=text.split('\\n').map(function(s){return s.trim()}).filter(function(s){return s.length>0&&s[0]!=='#'});
+  if(models.length===0){alert('Enter at least 1 model');return}
+  APP.models=models;APP.selectedModels=new Set(models);renderChips()}
+
+// ===== RENDER MODEL CHIPS =====
+function renderChips(){
+  var container=document.getElementById('modelCheckboxes');
+  container.innerHTML='';
+  APP.models.forEach(function(model){
+    var label=document.createElement('label');
+    label.className='model-chip'+(APP.selectedModels.has(model)?' active':'');
+    label.innerHTML='<input type="checkbox"'+(APP.selectedModels.has(model)?' checked':'')+'> <span class="chip-dot"></span>'+model;
+    container.appendChild(label)});
+  updateCounts()}
+
+function updateCounts(){
+  var c=document.querySelectorAll('#modelCheckboxes input:checked').length;
+  var t=document.querySelectorAll('#modelCheckboxes input').length;
+  document.getElementById('selectedCount').textContent=c;
+  document.getElementById('totalCount').textContent=t;
+  document.getElementById('startBtn').disabled=c===0||!APP.apiKey.trim()}
+
+// ===== EVENT BINDING =====
+function bindEvents(){
+  document.getElementById('apiKeyInput').addEventListener('input',function(e){
+    APP.apiKey=e.target.value.trim();
+    document.getElementById('startBtn').disabled=APP.selectedModels.size===0||!APP.apiKey});
+  document.getElementById('baseUrlInput').addEventListener('change',function(e){
+    APP.baseUrl=e.target.value.trim().replace(/\/$/,'')});
+  APP.baseUrl=document.getElementById('baseUrlInput').value.replace(/\/$/,'');
+  document.getElementById('modelCheckboxes').addEventListener('click',function(e){
+    var chip=e.target.closest('.model-chip');if(!chip)return;
+    var cb=chip.querySelector('input');cb.checked=!cb.checked;
+    chip.classList.toggle('active',cb.checked);
+    APP.selectedModels.clear();
+    document.querySelectorAll('#modelCheckboxes input:checked').forEach(function(i){APP.selectedModels.add(i.parentElement.querySelector('.chip-dot').parentElement.textContent.replace(/^\\s*/,''))});
+    // Simpler approach
+    APP.selectedModels=new Set();
+    document.querySelectorAll('#modelCheckboxes input:checked').forEach(function(inp){
+      var txt=inp.parentElement.textContent.replace(/^\\s+|\\s+$/g,'').replace(/^\\S+/,'').trim();
+      APP.selectedModels.add(txt)});
+    // Even simpler - store model names directly on chip dataset
+    });
+  // Fix checkbox handling - use proper event delegation
+  document.getElementById('modelCheckboxes').addEventListener('change',function(e){
+    if(e.target.type!=='checkbox')return;
+    var chip=e.target.closest('.model-chip');
+    if(chip)APP.selectedModels.set(chip.dataset.model,e.target.checked);
+    // Rebuild chips to reflect state properly
+    buildChipSet();updateCounts()});
+  function buildChipSet(){
+    APP.selectedModels.clear();
+    document.querySelectorAll('#modelCheckboxes input:checked').forEach(function(inp){
+      var name=inp.closest('.model-chip')?.dataset.model||'';
+      if(name)APP.selectedModels.add(name)})}
+  // Override initial bind for checkboxes
+  document.getElementById('modelCheckboxes').onclick=function(e){
+    if(e.target.type==='checkbox'){
+      var chip=e.target.closest('.model-chip');
+      if(chip){
+        var name=chip.dataset.model;
+        var isChecked=e.target.checked;
+        chip.classList.toggle('active',isChecked);
+        buildChipSet();updateCounts()}}};
+  document.getElementById('fetchModelsBtn').addEventListener('click',fetchModelsFromApi);
+  document.getElementById('selectAllModelsBtn')?.addEventListener('click',function(){APP.selectedModels=new Set(APP.models);renderChips()});
+  document.getElementById('deselectAllModelsBtn')?.addEventListener('click',function(){APP.selectedModels.clear();renderChips()});
+  document.getElementById('startBtn').addEventListener('click',startBenchmark);
+  document.getElementById('resetBtn').addEventListener('click',resetApp);
+  document.querySelectorAll('.filter-btn[data-filter]').forEach(function(btn){
+    btn.addEventListener('click',function(){
+      document.querySelectorAll('.filter-btn').forEach(function(b){b.classList.remove('active')});
+      btn.classList.add('active');applyFilter(btn.dataset.filter)})});
+  document.querySelectorAll('th[data-sort]').forEach(function(th){
+    th.addEventListener('click',function(){
+      var key=th.dataset.sort;
+      document.querySelectorAll('th[data-sort]').forEach(function(t){t.classList.remove('sorted-asc','sorted-desc')});
+      var asc=th.classList.contains('sorted-asc');
+      th.classList.toggle('sorted-asc',!asc);th.classList.toggle('sorted-desc',!!asc);
+      sortTable(key,!asc)})});
+  document.getElementById('exportCsvBtn').addEventListener('click',exportCSV);
+  document.getElementById('exportJsonBtn').addEventListener('click',exportJSON);
+  document.getElementById('copyTableBtn').addEventListener('click',copyTable);
+}
+
+// Better chip rendering that stores model names
+function renderChipsProper(){
+  var container=document.getElementById('modelCheckboxes');container.innerHTML='';
+  APP.models.forEach(function(model){
+    var label=document.createElement('label');
+    label.className='model-chip'+(APP.selectedModels.has(model)?' active':'');
+    label.dataset.model=model;
+    label.innerHTML='<input type="checkbox"'+(APP.selectedModels.has(model)?' checked':'')+'><span class="chip-dot"></span>'+model;
+    container.appendChild(label)});
+  updateCounts()}
+// Replace bindEvents to use proper chip rendering
+bindEvents=function(){
+  document.getElementById('apiKeyInput').addEventListener('input',function(e){
+    APP.apiKey=e.target.value.trim();
+    document.getElementById('startBtn').disabled=APP.selectedModels.size===0||!APP.apiKey});
+  document.getElementById('baseUrlInput').addEventListener('change',function(e){
+    APP.baseUrl=e.target.value.trim().replace(/\/$/,'')});
+  APP.baseUrl=document.getElementById('baseUrlInput').value.replace(/\/$/,'');
+  document.getElementById('modelCheckboxes').addEventListener('change',function(e){
+    if(e.target.type!=='checkbox')return;
+    var name=e.target.closest('.model-chip')?.dataset.model;
+    if(name){if(e.target.checked)APP.selectedModels.add(name);else APP.selectedModels.delete(name)}
+    renderChipsProper();updateCounts()});
+  document.getElementById('fetchModelsBtn').addEventListener('click',fetchModelsFromApi);
+  document.getElementById('selectAllModelsBtn')?.addEventListener('click',function(){APP.selectedModels=new Set(APP.models);renderChipsProper()});
+  document.getElementById('deselectAllModelsBtn')?.addEventListener('click',function(){APP.selectedModels.clear();renderChipsProper()});
+  document.getElementById('startBtn').addEventListener('click',startBenchmark);
+  document.getElementById('resetBtn').addEventListener('click',resetApp);
+  document.querySelectorAll('.filter-btn[data-filter]').forEach(function(btn){
+    btn.addEventListener('click',function(){
+      document.querySelectorAll('.filter-btn').forEach(function(b){b.classList.remove('active')});
+      btn.classList.add('active');applyFilter(btn.dataset.filter)})});
+  document.querySelectorAll('th[data-sort]').forEach(function(th){
+    th.addEventListener('click',function(){
+      var key=th.dataset.sort;
+      document.querySelectorAll('th[data-sort]').forEach(function(t){t.classList.remove('sorted-asc','sorted-desc')});
+      var asc=th.classList.contains('sorted-asc');
+      th.classList.toggle('sorted-asc',!asc);th.classList.toggle('sorted-desc',!!asc);
+      sortTable(key,!asc)})});
+  document.getElementById('exportCsvBtn').addEventListener('click',exportCSV);
+  document.getElementById('exportJsonBtn').addEventListener('click',exportJSON);
+  document.getElementById('copyTableBtn').addEventListener('click',copyTable);
+};
+
+// ===== BENCHMARK ENGINE =====
+async function startBenchmark(){
+  APP.apiKey=document.getElementById('apiKeyInput').value.trim();
+  APP.baseUrl=document.getElementById('baseUrlInput').value.trim().replace(/\/$/,'');
+  var attempts=parseInt(document.getElementById('attemptInput').value)||1;
+  var concurrent=parseInt(document.getElementById('concurrentInput').value)||5;
+  var deepScan=document.getElementById('enableDeepScanCheck')?.checked!==false;
+  var promptText=document.getElementById('promptInput')?.value||PROBES.identity;
+  if(!APP.apiKey){alert('Enter API Key!');return}
+  APP.results=[];APP.isRunning=true;APP.currentAttempt=0;APP.totalAttempts=attempts;
+  APP.completedRequests=0;APP.successfulRequests=0;APP.failedRequests=0;APP.deepScanned=0;
+  var totalModels=APP.selectedModels.size;
+  APP.totalRequests=totalModels*attempts;
+  document.getElementById('startBtn').disabled=true;
+  document.getElementById('startBtn').innerHTML='<span class="spinner"></span> Running...';
+  document.getElementById('progressSection').classList.add('active');
+  document.getElementById('resultsSection').classList.remove('active');
+  document.getElementById('liveLog').innerHTML='';
+  try{
+    // Phase 1: Latency
+    for(var att=1;att<=attempts;att++){
+      APP.currentAttempt=att;
+      showLog('\\u2501\\u2501\\u2501 Attempt '+att+'/'+attempts+' \\u2501\\u2501\\u2501');
+      await runBatch(attempt=att,models=Array.from(APP.selectedModels),prompt=promptText);
+    }
+    showLog('\\n\\u2501\\u2501\\u2501 Latency Test Complete! \\u2501\\u2501\\u2501');
+    // Phase 2: Deep Scan
+    if(deepScan){
+      showLog('\\n\\u2501\\u2501\\u2501 Starting Deep Scan Phase \\u2501\\u2501\\u2501');
+      var okModels=Array.from(APP.selectedModels).filter(function(m){
+        return APP.results.find(function(r){return r.model===m&&r.success_attempts>0})});
+      if(okModels.length>=2){
+        await runDeepScan(okModels,concurrent);
+      }else{showLog('\\u26a0\\ufe0f Less than 2 successful models -> skip Deep Scan')}
+    }
+    showLog('\\n\\u2501\\u2501\\u2501 Benchmark Complete! \\u2501\\u2501\\u2501');
+  }catch(err){
+    if(err.name!=='AbortError'&&err.message){showLog('ERROR: '+err.message)}}
+  finally{
+    APP.isRunning=false;showResults(totalModels);
+    document.getElementById('startBtn').disabled=false;
+    document.getElementById('startBtn').innerHTML='\\U0001f680 Start Benchmark';
+    document.getElementById('progressSection').classList.remove('active')}}
+
+// Fix variable name conflict
+async function runBatch(attempt,models,prompt){
+  var remaining=models.filter(function(m){return !APP.results.find(function(r){return r.model===m})});
+  if(remaining.length===0)return;
+  var idx=0;var conc=parseInt(document.getElementById('concurrentInput').value)||5;
+  while(idx<remaining.length){
+    var batch=remaining.slice(idx,idx+conc);idx+=conc;
+    var promises=batch.map(async function(model){
+      var result=await doRequest(model,prompt,attempt);
+      var existing=APP.results.find(function(r){return r.model===model});
+      if(existing){existing['a'+attempt+'_ms']=result.latency_ms;existing.attempts++;
+        if(result.ok){existing.success_attempts++;
+          existing['masked_a'+attempt]=result.masked;
+          existing['mask_reason_a'+attempt]=result.mask_reason;
+          existing['boilerplate_a'+attempt]=result.is_boilerplate;
+          existing['sanitize_level_a'+attempt]=result.sanitize_level;
+          existing['sanitize_reason_a'+attempt]=result.sanitize_reason;
+          existing['response_a'+attempt]=result.response;
+          existing['full_response_a'+attempt]=result.full_response}
+        else{existing.fail_reason=result.error||'Timeout/Error'}}
+      else{
+        APP.results.push({model:model,attempts:1,success_attempts:result.ok?1:0,
+          fail_reason:result.ok?null:(result.error||'Timeout/Error'),
+          'a'+attempt+'_ms':result.latency_ms,
+          'masked_a'+attempt:result.masked,'mask_reason_a'+attempt:result.mask_reason,
+          'boilerplate_a'+attempt:result.is_boilerplate,
+          'sanitize_level_a'+attempt:result.sanitize_level,
+          'sanitize_reason_a'+attempt:result.sanitize_reason,
+          'response_a'+attempt:result.response,
+          'full_response_a'+attempt:result.full_response})}
+      APP.completedRequests++;
+      if(result.ok){APP.successfulRequests++;logEntry(result)}else{APP.failedRequests++;logEntry(result,true)}
+      updateStats(totalModels)});
+    await Promise.all(promises)}}
+
+async function runDeepScan(okModels,concurrent){
+  APP.deepScanned=0;var total=okModels.length;
+  showLog('  Testing '+total+' models with 4 probes each...');
+  var idx=0;
+  while(idx<okModels.length){
+    var batch=okModels.slice(idx,idx+Math.min(concurrent,3));idx+=Math.min(concurrent,3);
+    var promises=batch.map(async function(model){
+      var scores={counting:0,date:0,creativity:0,identity:0};
+      try{scores.counting=await probeTest(model,PROBES.counting,1)}catch(e){}
+      try{scores.date=await probeTest(model,PROBES.date,2)}catch(e){}
+      try{scores.creativity=await probeTest(model,PROBES.creativity,3)}catch(e){}
+      try{scores.identity=await probeTest(model,PROBES.identity,4)}catch(e){}
+      var res=APP.results.find(function(x){return x.model===model});
+      if(res){res.probe_scores=scores;APP.deepScanned++}
+      updateStats(totalModels)});
+    await Promise.all(promises)}
+  showLog('  Deep Scan done: '+APP.deepScanned+'/'+total+' models analyzed')}
+
+async function probeTest(model,probeText,probeId){
+  var url=APP.baseUrl+'/chat/completions';
+  var payload={model:model,messages:[{role:'user',content:probeText}],temperature:0.8,max_tokens:80,stream:false};
+  var ctrl=new AbortController();var tout=setTimeout(function(){ctrl.abort()},30000);
+  try{
+    var resp=await fetch(url,{method:'POST',headers:{'Content-Type':'application/json','Authorization':'Bearer '+APP.apiKey},body:JSON.stringify(payload),signal:ctrl.signal});
+    clearTimeout(tout);
+    if(!resp.ok)return 0;
+    var data=await resp.json();var content='';
+    try{content=data.choices[0].message.content}catch(e){}
+    content=content.trim();
+    return evaluateProbe(probeId,content)}catch(e){clearTimeout(tout);return 0}}
+
+function evaluateProbe(pid,text){
+  if(!text||text.length<2)return 0;
+  if(pid===1){
+    // Counting: banana has 3 'a's
+    var cleaned=text.replace(/[^a-zA-Z0-9]/g,'').trim();
+    if(cleaned==='3'||cleaned==='tiga')return 100;
+    if(/^\d+$/.test(cleaned)){var num=parseInt(cleaned);return Math.max(0,50-Math.abs(num-3)*20)}
+    return 10}
+  if(pid===2){
+    var dm=text.match(/\\d{4}[-\\/\\.]\\d{1,2}[-\\/\\.]\\d{1,2}/);
+    if(dm)return 80;
+    var low=text.toLowerCase();
+    if(low.indexOf('today')>=0||low.indexOf('hari ini')>=0)return 40;
+    return 10}
+  if(pid===3){
+    var words=text.toLowerCase().split(/\\s+/).filter(function(w){return w.length>0});
+    var unique=new Set(words).size;
+    var ratio=unique/Math.max(words.length,1);
+    if(ratio>.7)return 90;if(ratio>.5)return 60;return 20}
+  // Identity baseline
+  var alphaR=text.replace(/[^a-zA-Z]/g,'').length/Math.max(text.replace(/\\s/g,'').length,1);
+  var filler=/^(well|sure|absolutely|okay|of course)\\b/i.test(text);
+  return Math.max(0,Math.round(alphaR*60+(filler?-10:0)))}
+
+// ===== MASKING DETECTION =====
+function detectMask(content){
+  var c=content.toLowerCase().trim();
+  if(c.length<2)return{masked:c.length===0?'Empty response':'Too short',boilerplate:false,reason:c.length===0?'Empty response':'Too short'};
+  var patterns=[
+    /^(i cannot |sorry i can'|i'm sorry but|my programming|i'm programmed)/i,
+    /^(i can't help with that|that's illegal|harmful activity)/i,
+    /^(content filtered|content has been filtered|your query was flagged|unable to process)/i,
+    /^\[content filtered|\[filtered|\[removed]|__FILTERED__/i,
+    /^([Ss]orry, |I apologize,|I can't assist with|As an AI language model)|^(tidak dapat|maaf saya tidak bisa|konten diblokir)/i,
+    /^(cannot comply|refused to generate|policy violation|community guideline)/i,
+    /^(no answer|answer not available|unavailable|not applicable)/i];
+  for(var i=0;i<patterns.length;i++){if(patterns[i].test(c))return{masked:true,boilerplate:false,reason:'Safety/refusal filter triggered'}}
+  if(/^(.)\\1{10,}$/.test(c))return{masked:true,boilerplate:false,reason:'Repeated characters'};
+  var bpReals=[/(?:response was generated by ai)|(?:generated using openai)|(?:automated response)|(?:this is a test)|(?:dummy response)|(?:placeholder text)|(?: lorem ipsum )/i];
+  for(var i=0;i<bpReals.length;i++){if(bpReals[i].test(c))return{masked:true,boilerplate:true,reason:'Boilerplate/template response'}}
+  var idPatterns=[/(?:i am .*gemini|google.*gemini)/i,/(?:claude|anthropic)/i,/(?:gpt|openai)/i,/(?:mistral|mistral ai)/i];
+  for(var i=0;i<idPatterns.length;i++){if(idPatterns[i].test(c)&&c.length<50)return{masked:false,boilerplate:true,reason:'Identity statement detected'}}
+  var errPats=[/\\b(stream|generation|inference)[-_ ]?(error|fail|interrupted|failed)\\b/i,\\bout_of_?token\\b/i,\\bcontext[_]?window\\b/i];
+  for(var i=0;i<errPats.length;i++){if(errPats[i].test(c))return{masked:true,boilerplate:false,reason:'Generation error in response'}}
+  return{masked:false,boilerplate:false,reason:''}
+}
+
+function detectSanitize(content){
+  if(!content||content.length<2)return{level:'clean',signals:[]};
+  var signals=[];var level='clean';
+  var meta=['intercepted by','redacted by','filtered by','policy violated','unsafe content'];
+  for(var mi=0;mi<meta.length;mi++){if(content.toLowerCase().indexOf(meta[mi])>=0){level='heavy';signals.push(meta[mi]);break}}
+  if(/<(p|div|span|meta|script)[\\s/>]/i.test(content)||/<!--[^>]*-->$/.test(content)){if(level!=='heavy')level='minor';signals.push('html_wrapper')}
+  var markers=['### GENERATED BY','SYSTEM MESSAGE:','AUTHOR:','MODEL ID:','Confidence:','VERSION: v'];
+  for(var wi=0;wi<markers.length;wi++){if(content.indexOf(markers[wi])>=0){if(level!=='heavy')level='minor';signals.push(markers[wi]);break}}
+  var bnds=[1024,2048,4096,8192];
+  for(var bi=0;bi<bnds.length;bi++){if(content.length===bnds[bi]){if(level!=='heavy')level='minor';signals.push('truncated_'+bnds[bi]);break}}
+  return{level:level,signals:signals}}
+
+// ===== REQUEST HELPER =====
+async function doRequest(model,prompt,attempt){
+  var url=APP.baseUrl+'/chat/completions';
+  var payload={model:model,messages:[{role:'user',content:prompt}],temperature:0.1,max_tokens:10,stream:false};
+  var body=JSON.stringify(payload);
+  var headers={'Content-Type':'application/json','Authorization':'Bearer '+APP.apiKey};
+  var ctrl=new AbortController();var tout=setTimeout(function(){ctrl.abort()},120000);
+  try{
+    var start=performance.now();
+    var resp=await fetch(url,{method:'POST',headers=headers,body:body,signal:ctrl.signal});
+    var elapsed=performance.now()-start;clearTimeout(tout);
+    if(!resp.ok){
+      var err='HTTP '+resp.status;
+      try{var ed=await resp.json();err=ed.error?.message||err}catch(e){}
+      return{ok:false,latency_ms:elapsed,error:err,masked:null,response:'',full_response:'',sanitize_level:'',sanitize_reason:''}}
+    var data=await resp.json();
+    var tokens=data.usage?.completion_tokens||'?';
+    var content='';try{content=data.choices[0].message.content}catch(e){}
+    content=content.trim();
+    var mask=detectMask(content);
+    var sanitize=detectSanitize(content);
+    return{
+      ok:true,latency_ms:elapsed,tokens_out:tokens,
+      masked:mask.masked,mask_reason:mask.reason,is_boilerplate:mask.boilerplate,
+      sanitize_level:sanitize.level,sanitize_reason:sanitize.signals.join(', '),
+      response:content.substring(0,80),full_response:content}}}
+  catch(e){clearTimeout(tout);
+    return{ok:false,latency_ms:performance.now()-start,error:e.message||'Unknown error',
+      masked:null,response:'',full_response:'',sanitize_level:'',sanitize_reason:''}}
+}
+
+// ===== LOGGING =====
+function showLog(msg){
+  var log=document.getElementById('liveLog');
+  var div=document.createElement('div');div.style.textAlign='center';
+  div.style.opacity='.7';div.style.fontSize='.85rem';div.style.padding='4px 0';
+  div.textContent=msg;log.appendChild(div)}
+
+function logEntry(entry,fail){
+  var log=document.getElementById('liveLog');
+  var div=document.createElement('div');div.className='log-entry';
+  var icon=fail?'\\u2717':'\\u2713';
+  var statusColor=fail?'var(--accent-red)':(entry.latency_ms<1000?'var(--accent-green)':entry.latency_ms<3000?'var(--accent-yellow)':'var(--accent-orange)');
+  var maskInd='',sanInd='';
+  if(entry.ok&&entry.masked!==null){
+    if(entry.masked){var mc=entry.is_boilerplate?'var(--accent-yellow)':'var(--accent-red)';maskInd='<span style="color:'+mc+';font-size:.72rem;font-weight:600">'+(entry.is_boilerplate?'BP':'MASKED')+'</span>'}
+    else{maskInd='<span style="color:var(--accent-green);font-size:.72rem;font-weight:600">Clean</span>'}}
+  if(entry.ok&&entry.sanitize_level&&entry.sanitize_level!=='clean'){
+    var sl=entry.sanitize_level;
+    sanInd='<span style="color:'+(sl==='heavy'?'var(--accent-red)':sl==='minor'?'var(--accent-yellow)':'var(--accent-green)')+';font-size:.72rem">'+sl.charAt(0).toUpperCase()+sl.slice(1)+'('+entry.sanitize_reason.split(',')[0]+')</span>'}
+  div.innerHTML='<span class="log-status" style="color:'+statusColor+'">'+icon+'</span><span class="log-model">'+entry.model+'</span>'+maskInd+sanInd+'<span class="log-ms" style="color:'+statusColor+'">'+entry.latency_ms.toFixed(0)+'ms</span>';
+  log.appendChild(div);log.scrollTop=log.scrollHeight}
+
+function updateStats(total){
+  document.getElementById('statTotal').textContent=total;
+  var done=APP.completedRequests;
+  document.getElementById('statRunning').textContent=Math.max(0,APP.totalRequests-done);
+  document.getElementById('statSuccess').textContent=APP.successfulRequests;
+  document.getElementById('statFailed').textContent=APP.failedRequests;
+  document.getElementById('statDeep').textContent=APP.deepScanned;
+  var pct=total>0?done/APP.totalRequests*100:0;
+  document.getElementById('progressBar').style.width=Math.min(pct,100)+'%';
+}
+
+// ===== RESULTS DISPLAY =====
+function showResults(totalModels){
+  var section=document.getElementById('resultsSection');section.classList.add('active');
+  var results=APP.results;
+  var okResults=results.filter(function(r){return r.success_attempts>0});
+  var failResults=results.filter(function(r){return r.success_attempts===0});
+
+  // Build summary arrays
+  var summary=results.map(function(r){
+    var vals=[];
+    for(var i=1;i<=APP.totalAttempts;i++){var v=r['a'+i+'_ms'];if(v!=null)vals.push(v)}
+    var best=vals.length>0?Math.min.apply(null,vals):Infinity;
+    var avg=vals.length>0?vals.reduce(function(a,b){return a+b},0)/vals.length:0;
+    var masked_first=null,mask_reason_first='',boilerplate_first=false;
+    var response_first='',full_response_first='';
+    var sanitize_level='',sanitize_reason='';
+    for(var i=1;i<=APP.totalAttempts;i++){
+      if(r['masked_a'+i]!==undefined){
+        masked_first=r['masked_a'+i];mask_reason_first=r['mask_reason_a'+i]||'';
+        boilerplate_first=!!r['boilerplate_a'+i];
+        response_first=r['response_a'+i]||'';full_response_first=r['full_response_a'+i]||'';
+        sanitize_level=r['sanitize_level_a'+i]||'';sanitize_reason=r['sanitize_reason_a'+i]||'';
+        break}}
+    return Object.assign({},r,{best:best,avg:avg,masked_first:masked_first,mask_reason_first:mask_reason_first,
+      boilerplate_first:boilerplate_first,response_first:response_first,full_response_first:full_response_first,
+      sanitize_level:sanitize_level,sanitize_reason:sanitize_reason})}).sort(function(a,b){return a.best-b.best});
+
+  // Tiers
+  summary.forEach(function(r,i){
+    r.rank=i+1;
+    if(r.success_attempts===0)r.tier='F';
+    else if(r.best<1000)r.tier='S';
+    else if(r.best<2000)r.tier='A';
+    else if(r.best<5000)r.tier='B';
+    else if(r.best<10000)r.tier='C';
+    else if(r.best<20000)r.tier='D';
+    else r.tier='E';
+    // Trust score from probes
+    if(r.probe_scores){
+      var ps=r.probe_scores;
+      var ts=Math.round(ps.counting*.35+ps.date*.25+ps.creativity*.25+ps.identity*.15);
+      ts=Math.min(100,Math.max(0,ts));
+      var issues=[];if(ps.counting<50)issues.push('counting');
+      if(ps.date<30)issues.push('date');if(ps.creativity<40)issues.push('originality');
+      if(ps.identity<30)issues.push('generic');
+      r.trust_score=ts;r.trust_label=ts>=80?'HIGH':ts>=50?'MED':'LOW';
+      r.trust_tag=ts>=80?'trust-high':ts>=50?'trust-med':'trust-low';r.trust_issues=issues
+    }else{r.trust_score=null;r.trust_label='N/A';r.trust_tag='';r.trust_issues=[]}});
+
+  // Cross-model similarity check
+  var okWithResponses=summary.filter(function(r){return r.success_attempts>0&&r.full_response_first&&r.identity_probe_result});
+  // Skip heavy cross-analysis for now to keep it simple
+
+  // Summary cards
+  var fastest=summary.find(function(r){return r.success_attempts>0})||{model:'-',best:Infinity};
+  var slowestOk=okResults.length>0?[].concat(okResults).sort(function(a,b){return b.best-a.best})[0]:{model:'-',best:Infinity};
+  var avgAll=okResults.length>0?okResults.reduce(function(s,r){return s+r.best},0)/okResults.length:0;
+  var speedRatio=fastest.best>0&&slowestOk.best>0?(slowestOk.best/fastest.best).toFixed(1):'-';
+  var successRate=totalModels>0?((okResults.length/totalModels)*100).toFixed(0):0;
+  var highTrust=summary.filter(function(r){return r.trust_score!=null&&r.trust_score>=80}).length;
+  var lowTrust=summary.filter(function(r){return r.trust_score!=null&&r.trust_score<50}).length;
+  var scannedN=summary.filter(function(r){return r.trust_score!=null}).length;
+
+  document.getElementById('summaryRow').innerHTML=
+    '<div class="summary-card fastest"><div class="icon-big">\\U0001f3c3</div><div class="value">'+(fastest.best<Infinity?fastest.best.toFixed(0)+' ms':'-')+'</div><div class="label">Fastest</div><div class="detail">'+fastest.model+'</div></div>'+
+    '<div class="summary-card slowest"><div class="icon-big">\\U0001f422</div><div class="value">'+(slowestOk.best<Infinity?slowestOk.best.toFixed(0)+' ms':'-')+'</div><div class="label">Slowest (OK)</div><div class="detail">'+slowestOk.model+'</div></div>'+
+    '<div class="summary-card avg-latency"><div class="icon-big">\\U0001f4c8</div><div class="value">'+(avgAll>0?avgAll.toFixed(0)+' ms':'-')+'</div><div class="label">Avg Latency</div><div class="detail">Successful only</div></div>'+
+    '<div class="summary-card success-rate"><div class="icon-big">\\u2705</div><div class="value">'+successRate+'%</div><div class="label">Success Rate</div><div class="detail">'+okResults.length+'/'+totalModels+'</div></div>'+
+    '<div class="summary-card ratio"><div class="icon-big">\\u2696\\ufe0f</div><div class="value">'+speedRatio+'x</div><div class="label">Speed Ratio</div><div class="detail">Fastest:Slowest</div></div>'+
+    '<div class="summary-card trust"><div class="icon-big">\\U0001f916</div><div class="value">'+highTrust+'/'+scannedN+'</div><div class="label">High Trust</div><div class="detail">'+lowTrust+' Low Trust</div></div>';
+
+  // Bar chart
+  var barHTML='';
+  okResults.forEach(function(r){
+    var maxV=okResults.length>0?Math.max.apply(null,okResults.map(function(x){return x.best})):1;
+    var pct=(r.best/maxV)*100;
+    var lc='latency-'+(r.best<1000?'fast':r.best<3000?'medium':r.best<10000?'slow':'very-slow');
+    barHTML+='<div class="bar-row"><div class="bar-label" title="'+r.model+'">'+r.model+'</div><div class="bar-track"><div class="bar-fill tier-'+r.tier+'" style="width:'+Math.max(pct,.5)+'%"></div></div><div class="bar-value '+lc+'">'+r.best.toFixed(0)+' ms</div></div>'});
+  document.getElementById('barChart').innerHTML=barHTML;
+
+  // Table
+  var tbody=document.getElementById('resultsBody');
+  var sorted=[].concat(summary).sort(function(a,b){return a.best-b.best});
+  var html='';
+  sorted.forEach(function(r){
+    var rankClass=r.rank<=3?'rank-'+r.rank:'rank-default';
+    var tierClass='tier-'+r.tier;
+    var latClass=r.success_attempts>0?(r.best<1000?'latency-fast':r.best<3000?'latency-medium':r.best<10000?'latency-slow':'latency-very-slow'):'';
+    var statusHtml=r.success_attempts>0?(r.success_attempts>=APP.totalAttempts?'<span class="status-ok">OK</span>':'<span class="status-partial">Partial</span>'):'<span class="status-fail">Fail</span>';
+    var maskHtml=r.success_attempts>0&&(r.masked_first!==null)?
+      (r.masked_first===true?(r.boilerplate_first?'<span style="font-size:.75rem;color:var(--accent-yellow)">BP</span>':'<span style="font-size:.75rem;color:var(--accent-red)">MASKED</span>'):
+      '<span style="font-size:.75rem;color:var(--accent-green)">Clean</span>'):'<span style="color:var(--text-muted)">-</span>';
+    var sanHtml=r.success_attempts>0&&r.sanitize_level&&r.sanitize_level!=='clean'?
+      (r.sanitize_level==='heavy'?'<span style="font-size:.75rem;color:var(--accent-red)">Heavy</span>':r.sanitize_level==='minor'?'<span style="font-size:.75rem;color:var(--accent-yellow)">Minor</span>':'<span style="color:var(--text-muted)">-</span>'):'<span style="color:var(--accent-green)">None</span>';
+    var trustHtml=r.trust_score!=null?'<span class="'+r.trust_tag+'" style="font-size:.75rem;font-weight:600">'+r.trust_score+'% '+r.trust_label+'</span>':'<span style="color:var(--text-muted)">-</span>';
+    var respPrev=r.response_first?r.response_first.substring(0,40).replace(/[<>]/g,''):'-';
+    var respTitle=(r.full_response_first||'').substring(0,200).replace(/[<>]/g,'').trim();
+    var truncated=(r.full_response_first||'').length>200;
+    var notes=[];if(r.trust_issues&&r.trust_issues.length>0)notes.push('Weak: '+r.trust_issues.join(', '));
+    if(r.sanitize_reason)notes.push('Sanitasi: '+r.sanitize_reason);
+    if(r.mask_reason_first)notes.push('Filter: '+r.mask_reason_first);
+    html+='<tr data-status="'+(r.success_attempts>0?(r.success_attempts>=APP.totalAttempts?'ok':'partial'):'fail')+'" data-masked="'+(!!r.masked_first)+'" data-trust-level="'+(r.trust_score!=null?r.trust_label:'')+'" data-trust-score="'+(r.trust_score||0)+'" data-sanitize="'+(r.sanitize_level||'clean')+'" title="'+respTitle+(truncated?' ...':'')+((notes.length>0)?'\\n--- '+notes.join('\\n - '):'')+'">'+
+      '<td><span class="rank-badge '+rankClass+'">'+r.rank+'</span></td>'+
+      '<td><strong>'+r.model+'</strong></td>'+
+      '<td><span class="tier-tag '+tierClass+'">'+r.tier+'</span></td>'+
+      '<td class="latency-cell '+latClass+'">'+(r.best<Infinity?r.best.toFixed(1):'FAIL')+'</td>'+
+      '<td>'+maskHtml+'</td>'+
+      '<td>'+sanHtml+'</td>'+
+      '<td>'+trustHtml+'</td>'+
+      '<td style="max-width:120px;overflow:hidden;text-overflow:ellipsis;font-size:.8rem;color:var(--text-secondary)" title="'+respTitle+'">'+respPrev+(truncated?'...':'')+'</td>'+
+      '<td style="color:var(--text-secondary)">'+r.success_attempts+'/'+r.attempts+'</td>'+
+      '<td>'+statusHtml+'</td></tr>'});
+  tbody.innerHTML=html;
+
+  // Failed list
+  var fc=document.getElementById('failedCard'),fl=document.getElementById('failedList');
+  if(failResults.length>0){fc.style.display='block';
+    fl.innerHTML=failResults.map(function(r){var reasons=[];if(r.fail_reason)reasons.push(r.fail_reason);
+      return'<div style="display:flex;align-items:center;gap:8px;padding:8px 0;border-bottom:1px solid var(--border);font-size:.85rem"><span style="color:var(--accent-red)">\\u2717</span><strong>'+r.model+'</strong><span style="color:var(--text-muted);font-size:.8rem">- '+reasons.join('; ')+'</span></div>'}).join('')}
+  else{fc.style.display='none'}
+  section.scrollIntoView({behavior:'smooth',block:'start'})}
+
+function sortTable(key,asc){
+  var rows=Array.from(document.querySelectorAll('#resultsBody tr'));
+  rows.sort(function(a,b){
+    var va='',vb='';
+    if(key==='rank'){va=parseInt(a.cells[0].textContent)||999;vb=parseInt(b.cells[0].textContent)||999}
+    else if(key==='model'){va=a.cells[1].textContent.trim();vb=b.cells[1].textContent.trim()}
+    else if(key==='latency'){va=parseFloat(a.cells[3]?.textContent)||0;vb=parseFloat(b.cells[3]?.textContent)||0}
+    else if(key==='trust'){va=parseInt(a.dataset.trustScore)||0;vb=parseInt(b.dataset.trustScore)||0}
+    else if(key==='masking'){va=a.cells[4]?.textContent.trim()||'';vb=b.cells[4]?.textContent.trim()||''}
+    else if(key==='sanitize'){va=a.cells[5]?.textContent.trim()||'';vb=b.cells[5]?.textContent.trim()||''}
+    else if(key==='status'){va=a.cells[9]?.textContent?.trim()||'';vb=b.cells[9]?.textContent?.trim()||''}
+    else{va=a.cells[2]?.textContent?.trim()||'';vb=b.cells[2]?.textContent?.trim()||''}
+    if(typeof va==='number')return asc?va-vb:vb-va;return asc?va.localeCompare(vb):vb.localeCompare(va)});
+  var tbody=document.getElementById('resultsBody');tbody.innerHTML='';
+  rows.forEach(function(row){tbody.appendChild(row)})}
+
+function applyFilter(filter){
+  document.querySelectorAll('#resultsBody tr').forEach(function(row){
+    var status=row.dataset.status;
+    var masked=row.dataset.masked==='true';
+    var trustLevel=row.dataset.trustLevel;
+    var sanitize=row.dataset.sanitize;
+    var show=true;
+    if(filter==='all')show=true;
+    else if(filter==='ok')show=status==='ok';
+    else if(filter==='partial')show=status==='partial';
+    else if(filter==='fail')show=status==='fail';
+    else if(filter==='clean')show=!masked&&status!=='fail'&&sanitize==='clean';
+    else if(filter==='masked')show=masked||status==='fail';
+    else if(filter==='trust_high')show=trustLevel==='HIGH';
+    else if(filter==='trust_med')show=trustLevel==='MED';
+    else if(filter==='trust_low')show=trustLevel==='LOW';
+    row.style.display=show?'':'none'})}
+
+// ===== EXPORT =====
+function getExportData(){
+  var data=[].concat(APP.results).map(function(r){
+    var vals=[];for(var i=1;i<=APP.totalAttempts;i++){var v=r['a'+i+'_ms'];if(v!=null)vals.push(v)}
+    var best=vals.length>0?Math.min.apply(null,vals):null;
+    var avg=vals.length>0?vals.reduce(function(a,b){return a+b},0)/vals.length:null;
+    var tier=best!=null?(best<1000?'S':best<2000?'A':best<5000?'B':best<10000?'C':best<20000?'D':'E'):'F';
+    var masked=null,mr='',bp=false,rp='',sl='clean',sr='';
+    for(var i=1;i<=APP.totalAttempts;i++){
+      if(r['masked_a'+i]!==undefined){masked=r['masked_a'+i];mr=r['mask_reason_a'+i]||'';bp=!!r['boilerplate_a'+i];rp=r['response_a'+i]||'';sl=r['sanitize_level_a'+i]||'clean';sr=r['sanitize_reason_a'+i]||'';break}}
+    var ps=r.probe_scores||{};
+    return{model:r.model,tier:tier,best_ms:best,avg_ms:avg,attempts_done:r.attempts,
+      status:r.success_attempts>0?(r.success_attempts>=APP.totalAttempts?'OK':'Partial'):'Fail',
+      masked:masked===true?(bp?'Boilerplate':'Masked'):(masked===false?'Clean':'N/A'),
+      mask_reason:mr,sanitize_level:sl,sanitize_reason:sr,
+      counting_score:ps.counting??null,date_score:ps.date??null,
+      creativity_score:ps.creativity??null,identity_score:ps.identity??null,
+      trust_score:r.trust_score,trust_label:r.trust_label}}).sort(function(a,b){return(a.best_ms||Infinity)-(b.best_ms||Infinity)}).map(function(r,i){r.rank=i+1;return r});
+  return data}
+
+function exportCSV(){
+  var data=getExportData();
+  var header=Object.keys(data[0]).join(',');
+  var rows=data.map(function(r){return Object.values(r).join(',')});
+  downloadFile(header+'\\n'+rows.join('\\n'),'benchmark_results.csv','text/csv')}
+
+function exportJSON(){downloadFile(JSON.stringify(getExportData(),null,2),'benchmark_results.json','application/json')}
+
+function copyTable(){
+  var data=getExportData();
+  var text=data.map(function(r){return r.rank+'\\t'+r.model+'\\t'+r.tier+'\\t'+(r.best_ms!=null?r.best_ms.toFixed(1)+'ms':'FAIL')+'\\t'+(r.avg_ms!=null?r.avg_ms.toFixed(1)+'ms':'-')+'\\t'+r.masked+'\\t'+r.sanitize_level+'\\t'+r.trust_score+' ('+r.trust_label+')'}).join('\\n');
+  navigator.clipboard.writeText('Rank\\tModel\\tTier\\tBest(ms)\\tAvg(ms)\\tMasked\\tSanitasi\\tTrust\\n'+text).then(function(){
+    var btn=document.getElementById('copyTableBtn');btn.textContent='\\u2705 Copied!';setTimeout(function(){btn.textContent='\\U0001f4cb Copy'},2000)})}
+
+function downloadFile(content,filename,type){
+  var blob=new Blob([content],{type:type});
+  var url=URL.createObjectURL(blob);
+  var a=document.createElement('a');a.href=url;a.download=filename;
+  document.body.appendChild(a);a.click();document.body.removeChild(a);URL.revokeObjectURL(url)}
+
+function resetApp(){
+  APP.results=[];APP.abortController?.abort();APP.isRunning=false;
+  document.getElementById('progressSection').classList.remove('active');
+  document.getElementById('resultsSection').classList.remove('active');
+  document.getElementById('liveLog').innerHTML='';
+  document.getElementById('progressBar').style.width='0%';
+  window.scrollTo({top:0,behavior:'smooth'})}
+
+// ===== BOOTSTRAP FIX =====
+// Re-init after page load since some functions are defined after their references
+setTimeout(function(){
+  // Recalculate after DOM is ready
+  var storedCounters=init; // noop to ensure all functions exist
+  renderChipsProper=function(){
+    var container=document.getElementById('modelCheckboxes');container.innerHTML='';
+    APP.models.forEach(function(model){
+      var label=document.createElement('label');
+      label.className='model-chip'+(APP.selectedModels.has(model)?' active':'');
+      label.dataset.model=model;
+      label.innerHTML='<input type="checkbox"'+(APP.selectedModels.has(model)?' checked':'')+'><span class="chip-dot"></span>'+model;
+      container.appendChild(label)});
+    updateCounts()};
+  // Override bindEvents to use proper chip rendering
+  bindEventsOverride=function(){
+    document.getElementById('modelCheckboxes').addEventListener('change',function(e){
+      if(e.target.type!=='checkbox')return;
+      var name=e.target.closest('.model-chip')?.dataset.model;
+      if(name){if(e.target.checked)APP.selectedModels.add(name);else APP.selectedModels.delete(name)}
+      renderChipsProper();updateCounts()});
+  };
+  document.getElementById('modelCheckboxes').removeEventListener('change',function(){});
+  bindEventsOverride();
+  renderChipsProper();
+},100);
+
+})();
+</script>
+</body>
+</ht
