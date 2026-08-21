@@ -309,6 +309,7 @@ function renderChips(){
   APP.models.forEach(function(model){
     var label=document.createElement('label');
     label.className='model-chip'+(APP.selectedModels.has(model)?' active':'');
+    label.dataset.model=model;
     label.innerHTML='<input type="checkbox"'+(APP.selectedModels.has(model)?' checked':'')+'> <span class="chip-dot"></span>'+model;
     container.appendChild(label)});
   updateCounts()}
