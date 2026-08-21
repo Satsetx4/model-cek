@@ -93,6 +93,7 @@ tr:hover td{background:var(--bg-hover)}
 @keyframes spin{to{transform:rotate(360deg)}}
 .pulse{animation:pulse 1.5s ease-in-out infinite}@keyframes pulse{0%,100%{opacity:1}50%{opacity:.5}}
 @media(max-width:768px){.app-container{padding:12px}.header h1{font-size:1.5rem}.card{padding:16px}.bar-label{width:120px;font-size:.7rem}.summary-row{grid-template-columns:repeat(2,1fr)}.btn-group{flex-direction:column}}
+.toast-container{position:fixed;top:20px;right:20px;z-index:9999;display:flex;flex-direction:column;gap:8px;max-width:420px;pointer-events:none}.toast{pointer-events:auto;padding:14px 18px;border-radius:10px;font-size:.85rem;font-weight:500;backdrop-filter:blur(12px);border:1px solid var(--border);box-shadow:0 8px 32px rgba(0,0,0,.4);max-width:420px;word-break:break-word;animation:toastIn .3s ease-out}.toast-success{background:rgba(35,83,42,.92);border-color:rgba(63,185,80,.4);color:#3fb950}.toast-error{background:rgba(83,25,25,.92);border-color:rgba(248,81,73,.4);color:#f85149}.toast-info{background:rgba(20,40,60,.92);border-color:rgba(88,166,255,.4);color:#58a6ff}@keyframes toastIn{from{opacity:0;transform:translateX(40px)}to{opacity:1;transform:translateX(0)}}@keyframes toastOut{from{opacity:1;transform:translateX(0)}to{opacity:0;transform:translateX(40px)}}
 </style>
 </head>
 <body>
@@ -219,6 +220,8 @@ tr:hover td{background:var(--bg-hover)}
   <div style="text-align:center;padding:30px 20px;color:var(--text-muted);font-size:.8rem">AI Model Latency &amp; Trust Benchmark &#x2022; Built for Hermes Agent</div>
 </div>
 
+<div class="toast-container" id="toastContainer"></div>
+
 <script>
 (function(){
 // ===== STATE =====
@@ -239,39 +242,63 @@ var PROBES={
 // ===== INIT =====
 function init(){renderChips();bindEvents();updateCounts()}
 
+// ===== TOAST NOTIFICATIONS =====
+function showToast(msg, type){
+  type=type||'info';
+  var c=document.getElementById('toastContainer');
+  if(!c)return;
+  var t=document.createElement('div');
+  t.className='toast toast-'+type;
+  t.textContent=msg;
+  c.appendChild(t);
+  setTimeout(function(){t.style.animation='toastOut .3s ease-in forwards';setTimeout(function(){t.remove()},300)},6000);
+}
+
 // ===== FETCH MODELS =====
 function fetchModelsFromApi(){
   var apiKey=document.getElementById('apiKeyInput').value.trim();
   var baseUrl=document.getElementById('baseUrlInput').value.replace(/\/$/,'');
-  if(!apiKey){alert('Masukkan API Key dulu!');document.getElementById('apiKeyInput').focus();return}
+  if(!apiKey){showToast('⚠️ Masukkan API Key dulu!','error');document.getElementById('apiKeyInput').focus();return}
   var btn=document.getElementById('fetchModelsBtn');
   btn.disabled=true;btn.innerHTML='<span class="spinner"></span> Fetching...';
-  fetch(baseUrl+'/models',{headers:{'Authorization':'Bearer '+apiKey}})
-  .then(function(r){return r.json()})
+  showToast('📡 Fetching models from '+baseUrl,'info');
+  var isLocal=(location.hostname==='localhost'||location.hostname==='127.0.0.1');
+  var req;
+  if(isLocal){req=fetch('/proxy?url='+encodeURIComponent(baseUrl+'/models')+'&auth=Bearer '+encodeURIComponent(apiKey))}
+  else{req=fetch(baseUrl+'/models',{headers:{'Authorization':'Bearer '+apiKey}})}
+  req
+  .then(function(r){
+    if(!r.ok)throw new Error('HTTP '+r.status+' '+r.statusText);
+    return r.text().then(function(txt){try{return JSON.parse(txt)}catch(e){throw new Error('Response bukan JSON: '+txt.substring(0,200))}})
+  })
   .then(function(data){
     var models=[];
     if(Array.isArray(data.data))models=data.data.map(function(m){return m.id}).filter(Boolean);
     else if(Array.isArray(data.models))models=data.models.filter(Boolean);
-    if(models.length===0)throw new Error('No models found');
-    models=[].concat(new Set(models)).sort();
+    if(models.length===0)throw new Error('Tidak ada model di response — response: '+JSON.stringify(data).substring(0,300));
+    models=Array.from(new Set(models)).sort();
     APP.models=models;APP.selectedModels=new Set(models);
-    renderChips();showLog('\\u2705 '+models.length+' models found from '+baseUrl);
+    renderChips();showToast('✅ '+models.length+' models berhasil di-fetch dari '+baseUrl,'success');
+    btn.disabled=false;btn.innerHTML='📡 Fetch Models';
   })
   .catch(function(e){
-    showLog('\\u26a0\\ufe0f /models endpoint not available. Use manual entry below.');
+    showToast('❌ Fetch gagal: '+e.message,'error');
+    showLog('⚠️ /models endpoint not available. Use manual entry below.');
     document.getElementById('modelCheckboxes').innerHTML=
-      '<textarea id="manualModelsInput" rows="6" placeholder="Qwen3.8-Max&#10;gemini-3-flash&#10;mistral-small-4" style="width:100%;background:var(--bg-primary);border:1px solid var(--border);border-radius:8px;padding:10px;color:var(--text-primary);font-family:monospace;resize:vertical">'+APP.models.join('\\n')+'</textarea><br><button class="btn btn-secondary" id="applyManualBtn" style="margin-top:8px">&#x2705; Apply Manual List</button>';
+      '<textarea id="manualModelsInput" rows="6" placeholder="Qwen3.8-Max&#10;gemini-3-flash&#10;mistral-small-4" style="width:100%;background:var(--bg-primary);border:1px solid var(--border);border-radius:8px;padding:10px;color:var(--text-primary);font-family:monospace;resize:vertical">'+APP.models.join('\n')+'</textarea><br><button class="btn btn-secondary" id="applyManualBtn" style="margin-top:8px">✅ Apply Manual List</button>';
     setTimeout(function(){
       document.getElementById('applyManualBtn')?.addEventListener('click',function(){
-        var models=document.getElementById('manualModelsInput').value.trim().split('\\n').map(function(s){return s.trim()}).filter(function(s){return s.length>0&&s[0]!=='#'});
+        var models=document.getElementById('manualModelsInput').value.trim().split('\n').map(function(s){return s.trim()}).filter(function(s){return s.length>0&&s[0]!=='#'});
         if(models.length===0){alert('Enter at least 1 model');return}
         APP.models=models;APP.selectedModels=new Set(models);renderChips()});
-    },50)}, {timeout:10000});
+    },50);
+    btn.disabled=false;btn.innerHTML='📡 Fetch Models';
+  });
 }
 
 function applyManualModels(){
   var text=document.getElementById('manualModelsInput').value.trim();
-  var models=text.split('\\n').map(function(s){return s.trim()}).filter(function(s){return s.length>0&&s[0]!=='#'});
+  var models=text.split('\n').map(function(s){return s.trim()}).filter(function(s){return s.length>0&&s[0]!=='#'});
   if(models.length===0){alert('Enter at least 1 model');return}
   APP.models=models;APP.selectedModels=new Set(models);renderChips()}
 
@@ -306,11 +333,11 @@ function bindEvents(){
     var cb=chip.querySelector('input');cb.checked=!cb.checked;
     chip.classList.toggle('active',cb.checked);
     APP.selectedModels.clear();
-    document.querySelectorAll('#modelCheckboxes input:checked').forEach(function(i){APP.selectedModels.add(i.parentElement.querySelector('.chip-dot').parentElement.textContent.replace(/^\\s*/,''))});
+    document.querySelectorAll('#modelCheckboxes input:checked').forEach(function(i){APP.selectedModels.add(i.parentElement.querySelector('.chip-dot').parentElement.textContent.replace(/^\s*/,''))});
     // Simpler approach
     APP.selectedModels=new Set();
     document.querySelectorAll('#modelCheckboxes input:checked').forEach(function(inp){
-      var txt=inp.parentElement.textContent.replace(/^\\s+|\\s+$/g,'').replace(/^\\S+/,'').trim();
+      var txt=inp.parentElement.textContent.replace(/^\s+|\s+$/g,'').replace(/^\S+/,'').trim();
       APP.selectedModels.add(txt)});
     // Even simpler - store model names directly on chip dataset
     });
@@ -422,26 +449,26 @@ async function startBenchmark(){
     // Phase 1: Latency
     for(var att=1;att<=attempts;att++){
       APP.currentAttempt=att;
-      showLog('\\u2501\\u2501\\u2501 Attempt '+att+'/'+attempts+' \\u2501\\u2501\\u2501');
+      showLog('\u2501\u2501\u2501 Attempt '+att+'/'+attempts+' \u2501\u2501\u2501');
       await runBatch(attempt=att,models=Array.from(APP.selectedModels),prompt=promptText);
     }
-    showLog('\\n\\u2501\\u2501\\u2501 Latency Test Complete! \\u2501\\u2501\\u2501');
+    showLog('\n\u2501\u2501\u2501 Latency Test Complete! \u2501\u2501\u2501');
     // Phase 2: Deep Scan
     if(deepScan){
-      showLog('\\n\\u2501\\u2501\\u2501 Starting Deep Scan Phase \\u2501\\u2501\\u2501');
+      showLog('\n\u2501\u2501\u2501 Starting Deep Scan Phase \u2501\u2501\u2501');
       var okModels=Array.from(APP.selectedModels).filter(function(m){
         return APP.results.find(function(r){return r.model===m&&r.success_attempts>0})});
       if(okModels.length>=2){
         await runDeepScan(okModels,concurrent);
-      }else{showLog('\\u26a0\\ufe0f Less than 2 successful models -> skip Deep Scan')}
+      }else{showLog('\u26a0\ufe0f Less than 2 successful models -> skip Deep Scan')}
     }
-    showLog('\\n\\u2501\\u2501\\u2501 Benchmark Complete! \\u2501\\u2501\\u2501');
+    showLog('\n\u2501\u2501\u2501 Benchmark Complete! \u2501\u2501\u2501');
   }catch(err){
     if(err.name!=='AbortError'&&err.message){showLog('ERROR: '+err.message)}}
   finally{
     APP.isRunning=false;showResults(totalModels);
     document.getElementById('startBtn').disabled=false;
-    document.getElementById('startBtn').innerHTML='\\U0001f680 Start Benchmark';
+    document.getElementById('startBtn').innerHTML='\U0001f680 Start Benchmark';
     document.getElementById('progressSection').classList.remove('active')}}
 
 // Fix variable name conflict
@@ -465,15 +492,16 @@ async function runBatch(attempt,models,prompt){
           existing['full_response_a'+attempt]=result.full_response}
         else{existing.fail_reason=result.error||'Timeout/Error'}}
       else{
-        APP.results.push({model:model,attempts:1,success_attempts:result.ok?1:0,
-          fail_reason:result.ok?null:(result.error||'Timeout/Error'),
-          'a'+attempt+'_ms':result.latency_ms,
-          'masked_a'+attempt:result.masked,'mask_reason_a'+attempt:result.mask_reason,
-          'boilerplate_a'+attempt:result.is_boilerplate,
-          'sanitize_level_a'+attempt:result.sanitize_level,
-          'sanitize_reason_a'+attempt:result.sanitize_reason,
-          'response_a'+attempt:result.response,
-          'full_response_a'+attempt:result.full_response})}
+        var r={model:model,attempts:1,success_attempts:result.ok?1:0,
+          fail_reason:result.ok?null:(result.error||'Timeout/Error')};
+        r['a'+attempt+'_ms']=result.latency_ms;
+        r['masked_a'+attempt]=result.masked;r['mask_reason_a'+attempt]=result.mask_reason;
+        r['boilerplate_a'+attempt]=result.is_boilerplate;
+        r['sanitize_level_a'+attempt]=result.sanitize_level;
+        r['sanitize_reason_a'+attempt]=result.sanitize_reason;
+        r['response_a'+attempt]=result.response;
+        r['full_response_a'+attempt]=result.full_response;
+        APP.results.push(r)}
       APP.completedRequests++;
       if(result.ok){APP.successfulRequests++;logEntry(result)}else{APP.failedRequests++;logEntry(result,true)}
       updateStats(totalModels)});
@@ -519,19 +547,19 @@ function evaluateProbe(pid,text){
     if(/^\d+$/.test(cleaned)){var num=parseInt(cleaned);return Math.max(0,50-Math.abs(num-3)*20)}
     return 10}
   if(pid===2){
-    var dm=text.match(/\\d{4}[-\\/\\.]\\d{1,2}[-\\/\\.]\\d{1,2}/);
+    var dm=text.match(/\d{4}[-\/\.]\d{1,2}[-\/\.]\d{1,2}/);
     if(dm)return 80;
     var low=text.toLowerCase();
     if(low.indexOf('today')>=0||low.indexOf('hari ini')>=0)return 40;
     return 10}
   if(pid===3){
-    var words=text.toLowerCase().split(/\\s+/).filter(function(w){return w.length>0});
+    var words=text.toLowerCase().split(/\s+/).filter(function(w){return w.length>0});
     var unique=new Set(words).size;
     var ratio=unique/Math.max(words.length,1);
     if(ratio>.7)return 90;if(ratio>.5)return 60;return 20}
   // Identity baseline
-  var alphaR=text.replace(/[^a-zA-Z]/g,'').length/Math.max(text.replace(/\\s/g,'').length,1);
-  var filler=/^(well|sure|absolutely|okay|of course)\\b/i.test(text);
+  var alphaR=text.replace(/[^a-zA-Z]/g,'').length/Math.max(text.replace(/\s/g,'').length,1);
+  var filler=/^(well|sure|absolutely|okay|of course)\b/i.test(text);
   return Math.max(0,Math.round(alphaR*60+(filler?-10:0)))}
 
 // ===== MASKING DETECTION =====
@@ -547,12 +575,12 @@ function detectMask(content){
     /^(cannot comply|refused to generate|policy violation|community guideline)/i,
     /^(no answer|answer not available|unavailable|not applicable)/i];
   for(var i=0;i<patterns.length;i++){if(patterns[i].test(c))return{masked:true,boilerplate:false,reason:'Safety/refusal filter triggered'}}
-  if(/^(.)\\1{10,}$/.test(c))return{masked:true,boilerplate:false,reason:'Repeated characters'};
+  if(/^(.)\1{10,}$/.test(c))return{masked:true,boilerplate:false,reason:'Repeated characters'};
   var bpReals=[/(?:response was generated by ai)|(?:generated using openai)|(?:automated response)|(?:this is a test)|(?:dummy response)|(?:placeholder text)|(?: lorem ipsum )/i];
   for(var i=0;i<bpReals.length;i++){if(bpReals[i].test(c))return{masked:true,boilerplate:true,reason:'Boilerplate/template response'}}
   var idPatterns=[/(?:i am .*gemini|google.*gemini)/i,/(?:claude|anthropic)/i,/(?:gpt|openai)/i,/(?:mistral|mistral ai)/i];
   for(var i=0;i<idPatterns.length;i++){if(idPatterns[i].test(c)&&c.length<50)return{masked:false,boilerplate:true,reason:'Identity statement detected'}}
-  var errPats=[/\\b(stream|generation|inference)[-_ ]?(error|fail|interrupted|failed)\\b/i,\\bout_of_?token\\b/i,\\bcontext[_]?window\\b/i];
+  var errPats=[/\b(stream|generation|inference)[-_ ]?(error|fail|interrupted|failed)\b/i,/\bout_of_?token\b/i,/\bcontext[_]?window\b/i];
   for(var i=0;i<errPats.length;i++){if(errPats[i].test(c))return{masked:true,boilerplate:false,reason:'Generation error in response'}}
   return{masked:false,boilerplate:false,reason:''}
 }
@@ -562,7 +590,7 @@ function detectSanitize(content){
   var signals=[];var level='clean';
   var meta=['intercepted by','redacted by','filtered by','policy violated','unsafe content'];
   for(var mi=0;mi<meta.length;mi++){if(content.toLowerCase().indexOf(meta[mi])>=0){level='heavy';signals.push(meta[mi]);break}}
-  if(/<(p|div|span|meta|script)[\\s/>]/i.test(content)||/<!--[^>]*-->$/.test(content)){if(level!=='heavy')level='minor';signals.push('html_wrapper')}
+  if(/<(p|div|span|meta|script)[\s/>]/i.test(content)||/<!--[^>]*-->$/.test(content)){if(level!=='heavy')level='minor';signals.push('html_wrapper')}
   var markers=['### GENERATED BY','SYSTEM MESSAGE:','AUTHOR:','MODEL ID:','Confidence:','VERSION: v'];
   for(var wi=0;wi<markers.length;wi++){if(content.indexOf(markers[wi])>=0){if(level!=='heavy')level='minor';signals.push(markers[wi]);break}}
   var bnds=[1024,2048,4096,8192];
@@ -578,7 +606,7 @@ async function doRequest(model,prompt,attempt){
   var ctrl=new AbortController();var tout=setTimeout(function(){ctrl.abort()},120000);
   try{
     var start=performance.now();
-    var resp=await fetch(url,{method:'POST',headers=headers,body:body,signal:ctrl.signal});
+    var resp=await fetch(url,{method:'POST',headers:headers,body:body,signal:ctrl.signal});
     var elapsed=performance.now()-start;clearTimeout(tout);
     if(!resp.ok){
       var err='HTTP '+resp.status;
@@ -594,7 +622,7 @@ async function doRequest(model,prompt,attempt){
       ok:true,latency_ms:elapsed,tokens_out:tokens,
       masked:mask.masked,mask_reason:mask.reason,is_boilerplate:mask.boilerplate,
       sanitize_level:sanitize.level,sanitize_reason:sanitize.signals.join(', '),
-      response:content.substring(0,80),full_response:content}}}
+      response:content.substring(0,80),full_response:content}}
   catch(e){clearTimeout(tout);
     return{ok:false,latency_ms:performance.now()-start,error:e.message||'Unknown error',
       masked:null,response:'',full_response:'',sanitize_level:'',sanitize_reason:''}}
@@ -610,7 +638,7 @@ function showLog(msg){
 function logEntry(entry,fail){
   var log=document.getElementById('liveLog');
   var div=document.createElement('div');div.className='log-entry';
-  var icon=fail?'\\u2717':'\\u2713';
+  var icon=fail?'\u2717':'\u2713';
   var statusColor=fail?'var(--accent-red)':(entry.latency_ms<1000?'var(--accent-green)':entry.latency_ms<3000?'var(--accent-yellow)':'var(--accent-orange)');
   var maskInd='',sanInd='';
   if(entry.ok&&entry.masked!==null){
@@ -697,12 +725,12 @@ function showResults(totalModels){
   var scannedN=summary.filter(function(r){return r.trust_score!=null}).length;
 
   document.getElementById('summaryRow').innerHTML=
-    '<div class="summary-card fastest"><div class="icon-big">\\U0001f3c3</div><div class="value">'+(fastest.best<Infinity?fastest.best.toFixed(0)+' ms':'-')+'</div><div class="label">Fastest</div><div class="detail">'+fastest.model+'</div></div>'+
-    '<div class="summary-card slowest"><div class="icon-big">\\U0001f422</div><div class="value">'+(slowestOk.best<Infinity?slowestOk.best.toFixed(0)+' ms':'-')+'</div><div class="label">Slowest (OK)</div><div class="detail">'+slowestOk.model+'</div></div>'+
-    '<div class="summary-card avg-latency"><div class="icon-big">\\U0001f4c8</div><div class="value">'+(avgAll>0?avgAll.toFixed(0)+' ms':'-')+'</div><div class="label">Avg Latency</div><div class="detail">Successful only</div></div>'+
-    '<div class="summary-card success-rate"><div class="icon-big">\\u2705</div><div class="value">'+successRate+'%</div><div class="label">Success Rate</div><div class="detail">'+okResults.length+'/'+totalModels+'</div></div>'+
-    '<div class="summary-card ratio"><div class="icon-big">\\u2696\\ufe0f</div><div class="value">'+speedRatio+'x</div><div class="label">Speed Ratio</div><div class="detail">Fastest:Slowest</div></div>'+
-    '<div class="summary-card trust"><div class="icon-big">\\U0001f916</div><div class="value">'+highTrust+'/'+scannedN+'</div><div class="label">High Trust</div><div class="detail">'+lowTrust+' Low Trust</div></div>';
+    '<div class="summary-card fastest"><div class="icon-big">\U0001f3c3</div><div class="value">'+(fastest.best<Infinity?fastest.best.toFixed(0)+' ms':'-')+'</div><div class="label">Fastest</div><div class="detail">'+fastest.model+'</div></div>'+
+    '<div class="summary-card slowest"><div class="icon-big">\U0001f422</div><div class="value">'+(slowestOk.best<Infinity?slowestOk.best.toFixed(0)+' ms':'-')+'</div><div class="label">Slowest (OK)</div><div class="detail">'+slowestOk.model+'</div></div>'+
+    '<div class="summary-card avg-latency"><div class="icon-big">\U0001f4c8</div><div class="value">'+(avgAll>0?avgAll.toFixed(0)+' ms':'-')+'</div><div class="label">Avg Latency</div><div class="detail">Successful only</div></div>'+
+    '<div class="summary-card success-rate"><div class="icon-big">\u2705</div><div class="value">'+successRate+'%</div><div class="label">Success Rate</div><div class="detail">'+okResults.length+'/'+totalModels+'</div></div>'+
+    '<div class="summary-card ratio"><div class="icon-big">\u2696\ufe0f</div><div class="value">'+speedRatio+'x</div><div class="label">Speed Ratio</div><div class="detail">Fastest:Slowest</div></div>'+
+    '<div class="summary-card trust"><div class="icon-big">\U0001f916</div><div class="value">'+highTrust+'/'+scannedN+'</div><div class="label">High Trust</div><div class="detail">'+lowTrust+' Low Trust</div></div>';
 
   // Bar chart
   var barHTML='';
@@ -734,7 +762,7 @@ function showResults(totalModels){
     var notes=[];if(r.trust_issues&&r.trust_issues.length>0)notes.push('Weak: '+r.trust_issues.join(', '));
     if(r.sanitize_reason)notes.push('Sanitasi: '+r.sanitize_reason);
     if(r.mask_reason_first)notes.push('Filter: '+r.mask_reason_first);
-    html+='<tr data-status="'+(r.success_attempts>0?(r.success_attempts>=APP.totalAttempts?'ok':'partial'):'fail')+'" data-masked="'+(!!r.masked_first)+'" data-trust-level="'+(r.trust_score!=null?r.trust_label:'')+'" data-trust-score="'+(r.trust_score||0)+'" data-sanitize="'+(r.sanitize_level||'clean')+'" title="'+respTitle+(truncated?' ...':'')+((notes.length>0)?'\\n--- '+notes.join('\\n - '):'')+'">'+
+    html+='<tr data-status="'+(r.success_attempts>0?(r.success_attempts>=APP.totalAttempts?'ok':'partial'):'fail')+'" data-masked="'+(!!r.masked_first)+'" data-trust-level="'+(r.trust_score!=null?r.trust_label:'')+'" data-trust-score="'+(r.trust_score||0)+'" data-sanitize="'+(r.sanitize_level||'clean')+'" title="'+respTitle+(truncated?' ...':'')+((notes.length>0)?'\n--- '+notes.join('\n - '):'')+'">'+
       '<td><span class="rank-badge '+rankClass+'">'+r.rank+'</span></td>'+
       '<td><strong>'+r.model+'</strong></td>'+
       '<td><span class="tier-tag '+tierClass+'">'+r.tier+'</span></td>'+
@@ -751,7 +779,7 @@ function showResults(totalModels){
   var fc=document.getElementById('failedCard'),fl=document.getElementById('failedList');
   if(failResults.length>0){fc.style.display='block';
     fl.innerHTML=failResults.map(function(r){var reasons=[];if(r.fail_reason)reasons.push(r.fail_reason);
-      return'<div style="display:flex;align-items:center;gap:8px;padding:8px 0;border-bottom:1px solid var(--border);font-size:.85rem"><span style="color:var(--accent-red)">\\u2717</span><strong>'+r.model+'</strong><span style="color:var(--text-muted);font-size:.8rem">- '+reasons.join('; ')+'</span></div>'}).join('')}
+      return'<div style="display:flex;align-items:center;gap:8px;padding:8px 0;border-bottom:1px solid var(--border);font-size:.85rem"><span style="color:var(--accent-red)">\u2717</span><strong>'+r.model+'</strong><span style="color:var(--text-muted);font-size:.8rem">- '+reasons.join('; ')+'</span></div>'}).join('')}
   else{fc.style.display='none'}
   section.scrollIntoView({behavior:'smooth',block:'start'})}
 
@@ -813,15 +841,15 @@ function exportCSV(){
   var data=getExportData();
   var header=Object.keys(data[0]).join(',');
   var rows=data.map(function(r){return Object.values(r).join(',')});
-  downloadFile(header+'\\n'+rows.join('\\n'),'benchmark_results.csv','text/csv')}
+  downloadFile(header+'\n'+rows.join('\n'),'benchmark_results.csv','text/csv')}
 
 function exportJSON(){downloadFile(JSON.stringify(getExportData(),null,2),'benchmark_results.json','application/json')}
 
 function copyTable(){
   var data=getExportData();
-  var text=data.map(function(r){return r.rank+'\\t'+r.model+'\\t'+r.tier+'\\t'+(r.best_ms!=null?r.best_ms.toFixed(1)+'ms':'FAIL')+'\\t'+(r.avg_ms!=null?r.avg_ms.toFixed(1)+'ms':'-')+'\\t'+r.masked+'\\t'+r.sanitize_level+'\\t'+r.trust_score+' ('+r.trust_label+')'}).join('\\n');
-  navigator.clipboard.writeText('Rank\\tModel\\tTier\\tBest(ms)\\tAvg(ms)\\tMasked\\tSanitasi\\tTrust\\n'+text).then(function(){
-    var btn=document.getElementById('copyTableBtn');btn.textContent='\\u2705 Copied!';setTimeout(function(){btn.textContent='\\U0001f4cb Copy'},2000)})}
+  var text=data.map(function(r){return r.rank+'\t'+r.model+'\t'+r.tier+'\t'+(r.best_ms!=null?r.best_ms.toFixed(1)+'ms':'FAIL')+'\t'+(r.avg_ms!=null?r.avg_ms.toFixed(1)+'ms':'-')+'\t'+r.masked+'\t'+r.sanitize_level+'\t'+r.trust_score+' ('+r.trust_label+')'}).join('\n');
+  navigator.clipboard.writeText('Rank\tModel\tTier\tBest(ms)\tAvg(ms)\tMasked\tSanitasi\tTrust\n'+text).then(function(){
+    var btn=document.getElementById('copyTableBtn');btn.textContent='\u2705 Copied!';setTimeout(function(){btn.textContent='\U0001f4cb Copy'},2000)})}
 
 function downloadFile(content,filename,type){
   var blob=new Blob([content],{type:type});
@@ -863,6 +891,8 @@ setTimeout(function(){
   bindEventsOverride();
   renderChipsProper();
 },100);
+
+init();
 
 })();
 </script>
