@@ -617,7 +617,15 @@ async function doRequest(model,prompt,attempt){
       return{ok:false,latency_ms:elapsed,error:err,masked:null,response:'',full_response:'',sanitize_level:'',sanitize_reason:''}}
     var data=await resp.json();
     var tokens=data.usage?.completion_tokens||'?';
-    var content='';try{content=data.choices[0].message.content}catch(e){}
+    var content='';
+    try{
+      var ch=data.choices&&data.choices[0];
+      content=(ch&&ch.message&&ch.message.content)||'';
+      if(typeof content!=='string')content=String(content==null?'':content);
+      if(!content)throw new Error('Response kosong dari provider (choices[0].message.content tidak ada)');
+    }catch(e){
+      clearTimeout(tout);
+      return{ok:false,latency_ms:performance.now()-start,error:e.message||'Empty/invalid response',masked:null,response:'',full_response:'',sanitize_level:'',sanitize_reason:''}}
     content=content.trim();
     var mask=detectMask(content);
     var sanitize=detectSanitize(content);
