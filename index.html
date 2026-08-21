@@ -668,8 +668,13 @@ function updateStats(){
 // ===== RESULTS DISPLAY =====
 function showResults(totalModels){
   var section=document.getElementById('resultsSection');section.classList.add('active');
-  var results=APP.results;
-  var okResults=results.filter(function(r){return r.success_attempts>0});
+  var results=APP.results.map(function(r){
+    var vals=[];
+    for(var i=1;i<=APP.totalAttempts;i++){var v=r['a'+i+'_ms'];if(v!=null&&isFinite(v))vals.push(v)}
+    if(r.best==null||!isFinite(r.best)){r.best=vals.length>0?Math.min.apply(null,vals):Infinity}
+    if(r.avg==null){r.avg=vals.length>0?vals.reduce(function(a,b){return a+b},0)/vals.length:0}
+    return r});
+  var okResults=results.filter(function(r){return r.success_attempts>0&&isFinite(r.best)});
   var failResults=results.filter(function(r){return r.success_attempts===0});
 
   // Build summary arrays
