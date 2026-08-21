@@ -467,7 +467,8 @@ async function startBenchmark(){
   }catch(err){
     if(err.name!=='AbortError'&&err.message){showLog('ERROR: '+err.message)}}
   finally{
-    APP.isRunning=false;showResults(totalModels);
+    APP.isRunning=false;
+    try{showResults(totalModels)}catch(e){showLog('Render error: '+e.message)}
     document.getElementById('startBtn').disabled=false;
     document.getElementById('startBtn').innerHTML='🚀 Start Benchmark';
     document.getElementById('progressSection').classList.remove('active')}}
@@ -674,9 +675,10 @@ function showResults(totalModels){
   // Build summary arrays
   var summary=results.map(function(r){
     var vals=[];
-    for(var i=1;i<=APP.totalAttempts;i++){var v=r['a'+i+'_ms'];if(v!=null)vals.push(v)}
-    var best=vals.length>0?Math.min.apply(null,vals):Infinity;
-    var avg=vals.length>0?vals.reduce(function(a,b){return a+b},0)/vals.length:0;
+    for(var i=1;i<=APP.totalAttempts;i++){var v=r['a'+i+'_ms'];if(v!=null&&isFinite(v))vals.push(v)}
+    var okVals=results.filter(function(x){return x.model===r.model&&x.success_attempts>0});
+    var best=okVals.length>0&&vals.length>0?Math.min.apply(null,vals):Infinity;
+    var avg=(okVals.length>0&&vals.length>0)?vals.reduce(function(a,b){return a+b},0)/vals.length:0;
     var masked_first=null,mask_reason_first='',boilerplate_first=false;
     var response_first='',full_response_first='';
     var sanitize_level='',sanitize_reason='';
