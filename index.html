@@ -468,7 +468,7 @@ async function startBenchmark(){
   finally{
     APP.isRunning=false;showResults(totalModels);
     document.getElementById('startBtn').disabled=false;
-    document.getElementById('startBtn').innerHTML='\U0001f680 Start Benchmark';
+    document.getElementById('startBtn').innerHTML='𐚀 Start Benchmark';
     document.getElementById('progressSection').classList.remove('active')}}
 
 // Fix variable name conflict
@@ -504,7 +504,7 @@ async function runBatch(attempt,models,prompt){
         APP.results.push(r)}
       APP.completedRequests++;
       if(result.ok){APP.successfulRequests++;logEntry(result)}else{APP.failedRequests++;logEntry(result,true)}
-      updateStats(totalModels)});
+      updateStats()});
     await Promise.all(promises)}}
 
 async function runDeepScan(okModels,concurrent){
@@ -521,7 +521,7 @@ async function runDeepScan(okModels,concurrent){
       try{scores.identity=await probeTest(model,PROBES.identity,4)}catch(e){}
       var res=APP.results.find(function(x){return x.model===model});
       if(res){res.probe_scores=scores;APP.deepScanned++}
-      updateStats(totalModels)});
+      updateStats()});
     await Promise.all(promises)}
   showLog('  Deep Scan done: '+APP.deepScanned+'/'+total+' models analyzed')}
 
@@ -650,7 +650,8 @@ function logEntry(entry,fail){
   div.innerHTML='<span class="log-status" style="color:'+statusColor+'">'+icon+'</span><span class="log-model">'+entry.model+'</span>'+maskInd+sanInd+'<span class="log-ms" style="color:'+statusColor+'">'+entry.latency_ms.toFixed(0)+'ms</span>';
   log.appendChild(div);log.scrollTop=log.scrollHeight}
 
-function updateStats(total){
+function updateStats(){
+  var total=APP.selectedModels.size;
   document.getElementById('statTotal').textContent=total;
   var done=APP.completedRequests;
   document.getElementById('statRunning').textContent=Math.max(0,APP.totalRequests-done);
@@ -725,12 +726,12 @@ function showResults(totalModels){
   var scannedN=summary.filter(function(r){return r.trust_score!=null}).length;
 
   document.getElementById('summaryRow').innerHTML=
-    '<div class="summary-card fastest"><div class="icon-big">\U0001f3c3</div><div class="value">'+(fastest.best<Infinity?fastest.best.toFixed(0)+' ms':'-')+'</div><div class="label">Fastest</div><div class="detail">'+fastest.model+'</div></div>'+
-    '<div class="summary-card slowest"><div class="icon-big">\U0001f422</div><div class="value">'+(slowestOk.best<Infinity?slowestOk.best.toFixed(0)+' ms':'-')+'</div><div class="label">Slowest (OK)</div><div class="detail">'+slowestOk.model+'</div></div>'+
-    '<div class="summary-card avg-latency"><div class="icon-big">\U0001f4c8</div><div class="value">'+(avgAll>0?avgAll.toFixed(0)+' ms':'-')+'</div><div class="label">Avg Latency</div><div class="detail">Successful only</div></div>'+
+    '<div class="summary-card fastest"><div class="icon-big">𐏃</div><div class="value">'+(fastest.best<Infinity?fastest.best.toFixed(0)+' ms':'-')+'</div><div class="label">Fastest</div><div class="detail">'+fastest.model+'</div></div>'+
+    '<div class="summary-card slowest"><div class="icon-big">𐐢</div><div class="value">'+(slowestOk.best<Infinity?slowestOk.best.toFixed(0)+' ms':'-')+'</div><div class="label">Slowest (OK)</div><div class="detail">'+slowestOk.model+'</div></div>'+
+    '<div class="summary-card avg-latency"><div class="icon-big">𐓈</div><div class="value">'+(avgAll>0?avgAll.toFixed(0)+' ms':'-')+'</div><div class="label">Avg Latency</div><div class="detail">Successful only</div></div>'+
     '<div class="summary-card success-rate"><div class="icon-big">\u2705</div><div class="value">'+successRate+'%</div><div class="label">Success Rate</div><div class="detail">'+okResults.length+'/'+totalModels+'</div></div>'+
     '<div class="summary-card ratio"><div class="icon-big">\u2696\ufe0f</div><div class="value">'+speedRatio+'x</div><div class="label">Speed Ratio</div><div class="detail">Fastest:Slowest</div></div>'+
-    '<div class="summary-card trust"><div class="icon-big">\U0001f916</div><div class="value">'+highTrust+'/'+scannedN+'</div><div class="label">High Trust</div><div class="detail">'+lowTrust+' Low Trust</div></div>';
+    '<div class="summary-card trust"><div class="icon-big">𐤖</div><div class="value">'+highTrust+'/'+scannedN+'</div><div class="label">High Trust</div><div class="detail">'+lowTrust+' Low Trust</div></div>';
 
   // Bar chart
   var barHTML='';
@@ -849,7 +850,7 @@ function copyTable(){
   var data=getExportData();
   var text=data.map(function(r){return r.rank+'\t'+r.model+'\t'+r.tier+'\t'+(r.best_ms!=null?r.best_ms.toFixed(1)+'ms':'FAIL')+'\t'+(r.avg_ms!=null?r.avg_ms.toFixed(1)+'ms':'-')+'\t'+r.masked+'\t'+r.sanitize_level+'\t'+r.trust_score+' ('+r.trust_label+')'}).join('\n');
   navigator.clipboard.writeText('Rank\tModel\tTier\tBest(ms)\tAvg(ms)\tMasked\tSanitasi\tTrust\n'+text).then(function(){
-    var btn=document.getElementById('copyTableBtn');btn.textContent='\u2705 Copied!';setTimeout(function(){btn.textContent='\U0001f4cb Copy'},2000)})}
+    var btn=document.getElementById('copyTableBtn');btn.textContent='\u2705 Copied!';setTimeout(function(){btn.textContent='𐓋 Copy'},2000)})}
 
 function downloadFile(content,filename,type){
   var blob=new Blob([content],{type:type});
