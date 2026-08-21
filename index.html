@@ -474,7 +474,7 @@ async function startBenchmark(){
 
 // Fix variable name conflict
 async function runBatch(attempt,models,prompt){
-  var remaining=models.filter(function(m){return !APP.results.find(function(r){return r.model===m})});
+  var remaining=models.filter(function(m){return !APP.results.find(function(r){return r.model===m&&r['a'+attempt+'_ms']!=null})});
   if(remaining.length===0)return;
   var idx=0;var conc=parseInt(document.getElementById('concurrentInput').value)||5;
   while(idx<remaining.length){
@@ -504,7 +504,8 @@ async function runBatch(attempt,models,prompt){
         r['full_response_a'+attempt]=result.full_response;
         APP.results.push(r)}
       APP.completedRequests++;
-      if(result.ok){APP.successfulRequests++;logEntry(result)}else{APP.failedRequests++;logEntry(result,true)}
+      if(result.ok){APP.successfulRequests++;logEntry({model:model,ok:true,latency_ms:result.latency_ms,masked:result.masked,is_boilerplate:result.is_boilerplate,sanitize_level:result.sanitize_level,sanitize_reason:result.sanitize_reason})}
+        else{APP.failedRequests++;logEntry({model:model,ok:false,latency_ms:result.latency_ms},true)}
       updateStats()});
     await Promise.all(promises)}}
 
@@ -648,7 +649,7 @@ function logEntry(entry,fail){
   if(entry.ok&&entry.sanitize_level&&entry.sanitize_level!=='clean'){
     var sl=entry.sanitize_level;
     sanInd='<span style="color:'+(sl==='heavy'?'var(--accent-red)':sl==='minor'?'var(--accent-yellow)':'var(--accent-green)')+';font-size:.72rem">'+sl.charAt(0).toUpperCase()+sl.slice(1)+'('+entry.sanitize_reason.split(',')[0]+')</span>'}
-  div.innerHTML='<span class="log-status" style="color:'+statusColor+'">'+icon+'</span><span class="log-model">'+entry.model+'</span>'+maskInd+sanInd+'<span class="log-ms" style="color:'+statusColor+'">'+entry.latency_ms.toFixed(0)+'ms</span>';
+  div.innerHTML='<span class="log-status" style="color:'+statusColor+'">'+icon+'</span><span class="log-model">'+(entry.model||'?')+'</span>'+maskInd+sanInd+'<span class="log-ms" style="color:'+statusColor+'">'+entry.latency_ms.toFixed(0)+'ms</span>';
   log.appendChild(div);log.scrollTop=log.scrollHeight}
 
 function updateStats(){
@@ -726,7 +727,8 @@ function showResults(totalModels){
   var lowTrust=summary.filter(function(r){return r.trust_score!=null&&r.trust_score<50}).length;
   var scannedN=summary.filter(function(r){return r.trust_score!=null}).length;
 
-  document.getElementById('summaryRow').innerHTML=
+  var _el=function(id){var e=document.getElementById(id);if(!e)throw new Error('missing #'+id);return e};
+  _el('summaryRow').innerHTML=
     '<div class="summary-card fastest"><div class="icon-big">🏃</div><div class="value">'+(fastest.best<Infinity?fastest.best.toFixed(0)+' ms':'-')+'</div><div class="label">Fastest</div><div class="detail">'+fastest.model+'</div></div>'+
     '<div class="summary-card slowest"><div class="icon-big">🐢</div><div class="value">'+(slowestOk.best<Infinity?slowestOk.best.toFixed(0)+' ms':'-')+'</div><div class="label">Slowest (OK)</div><div class="detail">'+slowestOk.model+'</div></div>'+
     '<div class="summary-card avg-latency"><div class="icon-big">📈</div><div class="value">'+(avgAll>0?avgAll.toFixed(0)+' ms':'-')+'</div><div class="label">Avg Latency</div><div class="detail">Successful only</div></div>'+
@@ -741,10 +743,10 @@ function showResults(totalModels){
     var pct=(r.best/maxV)*100;
     var lc='latency-'+(r.best<1000?'fast':r.best<3000?'medium':r.best<10000?'slow':'very-slow');
     barHTML+='<div class="bar-row"><div class="bar-label" title="'+r.model+'">'+r.model+'</div><div class="bar-track"><div class="bar-fill tier-'+r.tier+'" style="width:'+Math.max(pct,.5)+'%"></div></div><div class="bar-value '+lc+'">'+r.best.toFixed(0)+' ms</div></div>'});
-  document.getElementById('barChart').innerHTML=barHTML;
+  _el('barChart').innerHTML=barHTML;
 
   // Table
-  var tbody=document.getElementById('resultsBody');
+  var tbody=_el('resultsBody');
   var sorted=[].concat(summary).sort(function(a,b){return a.best-b.best});
   var html='';
   sorted.forEach(function(r){
